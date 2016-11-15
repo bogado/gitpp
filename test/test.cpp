@@ -35,7 +35,7 @@ go_bandit([](){
         0x81, 0x7f
     };
 
-    // 1000 0000001 = 1000'1000 0000'0001
+    // 0000'0100 0000'0001 => 1000'1000 0000'0001
     const std::uint8_t num_1025[] = {
         0x88, 0x01
     };
@@ -71,10 +71,24 @@ go_bandit([](){
             });
         };
 
+        auto load_and_print_test = [&](const auto& arr, auto print) {
+            it((std::string("print test for ") + print).c_str(), [&]() {
+                load(arr);
+
+                std::stringstream out;
+                out << test;
+                AssertThat(out.str(), Equals(print));
+            });
+        };
+
         load_and_convert_test(num_32, uint8_t(32));
+        load_and_print_test(num_32, "0x20");
         load_and_convert_test(num_255, uint8_t(255));
+        load_and_print_test(num_255, "0xff");
         load_and_convert_test(num_1025, uint16_t(1025));
+        load_and_print_test(num_1025, "0x401");
         load_and_convert_test(num_65536, uint32_t(65536));
+        load_and_print_test(num_65536, "0x10000");
 
     });
 });

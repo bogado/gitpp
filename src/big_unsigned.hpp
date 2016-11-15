@@ -83,11 +83,11 @@ public:
         return values.crend();
     }
 
-    std::size_t size() {
+    std::size_t size() const {
         return values.size();
     }
 
-    unsigned bit_size() {
+    unsigned bit_size() const {
         auto s = size();
         if (s == 0) {
             return 0;
@@ -201,6 +201,57 @@ public:
             }
         }
         return result;
+    }
+
+    template <typename Stream>
+    friend Stream& operator<<(Stream& out, const big_unsigned_base& me) {
+        auto flags = out.flags();
+
+        static unsigned hex_digit_mask = 0xf;
+        static unsigned hex_digit_bits = 4;
+
+        bool start=true;
+
+        out << "0x" << std::hex;
+        auto it = me.begin();
+        if (it == me.end()) {
+            out << "0";
+            return out;
+        } else {
+            unsigned current = non_reserved_mask & *it;
+            unsigned current_bits = non_reserved_bits;
+            unsigned total_bits = me.size()*bits_per_unit - reserved_bits;
+
+            while (total_bits > 0) {
+                unsigned consume_bits = total_bits % hex_digit_bits;
+                consume_bits = consume_bits == 0 ? hex_digit_bits : consume_bits;
+
+                unsigned move = current_bits - consume_bits;
+                unsigned v = current >> move;
+
+                if (! start || v != 0) {
+                    start = false;
+                    out << v;
+                }
+
+                total_bits -= consume_bits;
+                current_bits -= consume_bits;
+                current &= (1 << current_bits) - 1;
+
+                if (current_bits < hex_digit_bits) {
+                    if (it == me.end()) {
+                        break;
+                    }
+                    ++it;
+
+                    current = (current << bits_per_unit) + (*it & value_mask);
+                    current_bits += bits_per_unit;
+                }
+            }
+        }
+
+        out.flags(flags);
+        return out;
     }
 
 private:
