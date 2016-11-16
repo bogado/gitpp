@@ -15,11 +15,11 @@ template <>
 struct Stringizer<std::string> {
     static std::string ToString(const std::string& v) {
         std::stringstream out;
-        out << "\"" << v << "\" [ " << std::hex;
+        out << "[ " << std::hex;
         for (unsigned char c : v) {
             out << "0x" << unsigned(c) << " ";
         }
-        out << "]";
+        out << "] \"" << v << "\"";
         return out.str();
     }
 };
