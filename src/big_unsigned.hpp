@@ -11,8 +11,8 @@
 namespace git {
 
 template <typename INT,
-         class storage = std::vector<INT>,
          unsigned reserved_bits = 0,
+         class storage = std::vector<INT>,
          unsigned value_bits = sizeof(INT)*8 - 1,
          typename = typename std::enable_if<
             std::is_integral<INT>::value &&
