@@ -113,7 +113,8 @@ public:
     template <class OStream>
     void binwrite(OStream& out) {
         for (const auto& val: values) {
-            buffer buff = unsigned_to_buffer(val);
+            buffer buff;
+            unsigned_to_buffer(val, buff);
             out.write(buff.data(), buff.size());
         }
     }
@@ -122,7 +123,7 @@ public:
     void dump(stream& out) {
         auto state = out.rdstate();
         out << "[ " << std::hex;
-        for (auto val : values) {
+        for (const auto& val : values) {
             out << unsigned(val) << " ";
         }
         out << "]";
@@ -134,10 +135,10 @@ private:
         static value_type bits_base = 1 << bits;
         static value_type bits_mask = bits_base - 1;
 
-        auto& new_value = *values.insert(std::begin(values), value & bits_mask);
+        auto it = values.insert(std::begin(values), value & bits_mask);
         value /= bits_base;
-        if (value > 0) {
-            new_value |= mask;
+        if (it != std::end(values)) {
+            *it |= mask;
         }
     }
 
@@ -231,7 +232,7 @@ public:
 
                 if (! start || v != 0) {
                     start = false;
-                    out << v;
+                    out << unsigned(v);
                 }
 
                 total_bits -= consume_bits;
@@ -260,23 +261,21 @@ private:
         return (val & mask) == 0;
     }
 
-    static value_type unsigned_from_buffer(const buffer& buf) {
-        static constexpr unsigned char byte_base = 0x100;
+    static value_type unsigned_from_buffer(
+            const buffer& buf) {
         value_type result = 0;
-        for (char v: buf) {
-            result = result * byte_base + v;
+        for (size_t i = 0; i < sizeof(value_type); i++) {
+            result += buf[i] * (1 << i * 8);
         }
         return result;
     }
 
-    static buffer&& unsigned_to_buffer(value_type val) {
+    static void  unsigned_to_buffer(value_type val, buffer& result) {
         static constexpr unsigned char byte_mask = 0xFF;
-        buffer result;
         for (char& v: result) {
             v = val % byte_mask;
             val /= 256;
         }
-        return std::move(result);
     }
 
     static constexpr value_type is_end(value_type v) {
