@@ -90,6 +90,18 @@ go_bandit([](){
         load_and_convert_test(num_65536, uint32_t(65536));
         load_and_print_test(num_65536, "0x10000");
 
+        auto convert_all_directions = [&](auto value) {
+            test = value;
+            AssertThat(test.convert<decltype(value)>(), Equals(value));
+        };
+
+        it("Convertion test", [&]() {
+            for (unsigned i=0; i < 0x1000; i++) {
+                convert_all_directions(i * 7);
+                convert_all_directions(i * 0x1000);
+                convert_all_directions(i * 0x1000000);
+            }
+        });
     });
 });
 
