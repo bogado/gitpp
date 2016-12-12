@@ -30,6 +30,12 @@ struct Stringizer<std::string> {
 
 #define TESTS_READY
 #include "big_unsigned_test.hpp"
+#include "pack_loader_test.hpp"
+
+go_bandit([]{
+    big_unsigned_test();
+    pack_data_test();
+});
 
 int main(int argc, char* argv[]) {
     return bandit::run(argc, argv);
