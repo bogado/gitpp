@@ -7,6 +7,8 @@
 #include <type_traits>
 #include <exception>
 #include <vector>
+#include <array>
+#include <typeinfo>
 
 namespace git {
 

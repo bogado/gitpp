@@ -1,11 +1,11 @@
-#ifndef BIG_UNDIGEND_TEST_HPP_INCLUDED
-#define BIG_UNDIGEND_TEST_HPP_INCLUDED
-
-#ifndef TESTS_READY
-#   error "This files has to be included by test.cpp alone."
-#endif
-
 #include "big_unsigned.hpp"
+
+#include <sstream>
+
+#include <bandit/bandit.h>
+
+using namespace bandit;
+using namespace git;
 
 void big_unsigned_test() {
     const static std::uint8_t num_32[] = {
@@ -85,5 +85,3 @@ void big_unsigned_test() {
         });
     });
 }
-
-#endif

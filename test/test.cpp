@@ -1,6 +1,4 @@
 #define TESTS_READY
-#include "pack_loader_test.hpp"
-#include "big_unsigned_test.hpp"
 
 #include <bandit/bandit.h>
 
@@ -8,7 +6,6 @@
 #include <sstream>
 #include <vector>
 
-using namespace git;
 using namespace bandit;
 
 // Those are helper functions :
