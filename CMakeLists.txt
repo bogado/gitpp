@@ -11,4 +11,5 @@ set_property(TARGET gitpp_test PROPERTY INTERFACE_COMPILE_OPTIONS --std=c++1z)
 set_property(TARGET gitpp_test PROPERTY CXX_STANDARD_REQUIRED ON)
 add_definitions(-DTEST_RESOURCE_PATH=\"${PROJECT_SOURCE_DIR}/test/res\")
 
-add_test(NAME "GitPP test" COMMAND gitpp_test)
+add_test(GitPPTest gitpp_test)
+add_custom_target(check COMMAND ./gitpp_test DEPENDS gitpp_test)
