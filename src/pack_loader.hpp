@@ -5,48 +5,82 @@
 #include <iterator>
 #include <algorithm>
 #include <exception>
+#include <iostream>
+#include <fstream>
+#include <string>
 
 #include "filesystem.hpp"
 
 namespace git {
 
 class index_item {
+    std::string name;
+    std::string type;
+    size_t size;
+    size_t pack_size;
+    size_t pack_offset;
+    size_t pack_depth;
+    std::string pack_parent;
 public:
-    auto name() const {
-        return "";
+
+    index_item(
+        std::string name_ = "",
+        std::string type_ = "",
+        size_t size_ = 0,
+        size_t pack_size_ = 0,
+        size_t pack_offset_ = 0,
+        size_t pack_depth_ = 0,
+        std::string pack_parent_ = ""
+    ) :
+        name{name_},
+        type{type_},
+        size{size_},
+        pack_size{pack_size_},
+        pack_offset{pack_offset_},
+        pack_depth{pack_depth_},
+        pack_parent{pack_parent_}
+    {}
+
+    auto get_name() const {
+        return name;
     }
 
-    auto type() const {
-        return "";
+    auto get_type() const {
+        return type;
     }
 
-    size_t size() const {
-        return 0;
+    auto get_size() const {
+        return size;
     }
 
-    size_t pack_size() {
-        return 0;
+    auto get_pack_size() {
+        return pack_size;
     }
 
-    size_t pack_offset() {
-        return 0;
+    auto get_pack_offset() {
+        return pack_offset;
     }
 
-    size_t pack_depth() {
-        return 0;
+    auto get_pack_depth() {
+        return pack_depth;
     }
 
-    auto pack_parent() {
-        return "";
+    auto get_pack_parent() {
+        return pack_parent;
     }
 };
 
-template <class STREAM, typename INDEX = int>
+template <class STREAM, typename INDEX = size_t>
 class index_reader_base {
     using stream_t = STREAM;
     using index_t = INDEX;
 
-    stream_t &input;
+    static const index_t SUMMARY_OFFSET = 8;
+    static const index_t SUMMARY_SIZE = 256 * 4;
+    static const index_t NAMES_OFFSET = SUMMARY_OFFSET + SUMMARY_SIZE;
+    static const index_t NAME_SIZE = 20;
+
+    mutable stream_t input;
 
     std::array<index_t, 256> summary;
 
@@ -63,7 +97,7 @@ class index_reader_base {
         if (!std::equal(buffer.begin(), buffer.end(), V2_HEADER)) {
             std::stringstream err;
             err << "V1 index is not supported [ ";
-            for (auto &val : buffer) { err << unsigned(uint8_t(val)) << " "; }
+            for (auto &val : buffer) { err << +val << " "; }
             err << "]";
             throw std::invalid_argument(err.str());
         }
@@ -84,17 +118,42 @@ class index_reader_base {
         }
     }
 
+    std::string read_name(index_t i) const {
+        input.clear();
+        input.seekg(NAMES_OFFSET + 20 * i, std::ios::beg);
+
+        char buffer[NAME_SIZE];
+        input.read(buffer, NAME_SIZE);
+
+        std::string result(NAME_SIZE * 2, ' ');
+        auto it = result.begin();
+        for (char v: buffer) {
+            *it = digit(v >> 4);
+            it++;
+            *it = digit(v & 0x0f);
+            it++;
+        }
+
+        return result;
+    }
+
+    static char digit (unsigned v) {
+        v &= 0x0f;
+        if (v < 10) {
+            return '0' + v;
+        } else {
+            return 'a' + (v - 10);
+        }
+    }
+
 public:
-    template <bool isConst = false>
-    class iterator_base {
-        using container_ref = typename std::conditional<isConst,
-                 const index_reader_base&,
-                 index_reader_base&>::type;
+    class iterator {
+        using container_ref = const index_reader_base&;
         index_t index;
         container_ref reader;
     public:
 
-        iterator_base(index_t start, container_ref ref) :
+        iterator(index_t start, container_ref ref) :
             index(start),
             reader(ref) {}
 
@@ -124,11 +183,11 @@ public:
             return reader[index];
         }
 
-        bool operator==(const iterator_base& other) const {
+        bool operator==(const iterator& other) const {
             return index == other.index && (&reader == &other.reader);
         }
 
-        bool operator!=(const iterator_base& other) const {
+        bool operator!=(const iterator& other) const {
             return !(*this == other);
         }
     };
@@ -136,32 +195,24 @@ public:
     using value_type = index_item;
     using reference = index_item&;
     using pointer = index_item*;
-    using iterator = iterator_base<false>;
-    using const_iterator = iterator_base<true>;
 
-
-    iterator begin() {
+    iterator begin() const {
         return iterator {0, *this};
     }
 
-    iterator end() {
+    iterator end() const {
         return iterator {size(), *this};
     }
 
-    const_iterator cbegin() const {
-        return const_iterator {0, *this};
+    auto operator[](int index) const {
+        return value_type{
+            read_name(index)
+        };
     }
 
-    const_iterator cend() const {
-        return const_iterator {size(), *this};
-    }
-
-    auto operator[](int index) {
-        return value_type{};
-    }
-
-    index_reader_base(stream_t& in) :
-        input(in)
+    template <typename... ARGS>
+    index_reader_base(ARGS... args) :
+        input(args...)
     {
         init();
         load_summary();
@@ -179,6 +230,9 @@ public:
             dump_stream << std::hex << (i++) << ":" << val << " ";
         }
         dump_stream << "]";
+        for (auto val: *this) {
+            dump_stream << val.get_name() << "\n";
+        }
     }
 };
 
@@ -192,19 +246,9 @@ INT from_buffer(const BUFFER& buffer) {
     return result;
 }
 
-template <class STREAM>
-auto index_file_parser(STREAM& in,
-         typename std::enable_if<
-            std::is_base_of<std::istream, STREAM>::value >::type* = 0) {
-    return index_reader_base<STREAM>{in};
-}
-
 template <class PATH>
-auto index_file_parser(PATH filename,
-         typename std::enable_if<
-            !std::is_base_of<std::istream, PATH>::value >::type* = 0) {
-    git::fs::ifstream stream(filename);
-    return index_file_parser(stream);
+auto index_file_parser(PATH filename) {
+    return index_reader_base<std::ifstream>(filename, std::ios::binary);
 }
 
 }
