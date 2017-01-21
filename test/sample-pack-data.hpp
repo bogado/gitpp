@@ -8,7 +8,7 @@ struct expected_objects {
     std::string type;
     size_t size;
     size_t pack_size;
-    size_t off_set;
+    size_t offset;
     size_t depth;
     std::string origin;
 };

@@ -15,35 +15,50 @@ namespace git {
 
 class index_item {
     std::string name;
-    std::string type;
-    size_t size;
-    size_t pack_size;
     size_t pack_offset;
-    size_t pack_depth;
-    std::string pack_parent;
 public:
 
     index_item(
-        std::string name_ = "",
-        std::string type_ = "",
+        const std::string& name_ = "",
+        size_t offset_ = 0
+    ) :
+        name(name_),
+        pack_offset(offset_)
+    {}
+
+    auto get_name() const {
+        return name;
+    }
+
+    auto get_pack_offset() {
+        return pack_offset;
+    }
+
+};
+
+class object_description : public index_item {
+    std::string type;
+    size_t size;
+    size_t pack_size;
+    size_t pack_depth;
+    std::string pack_parent;
+public:
+    object_description(
+        const std::string& name_ = "",
+        const std::string& type_ = "",
         size_t size_ = 0,
         size_t pack_size_ = 0,
         size_t pack_offset_ = 0,
         size_t pack_depth_ = 0,
         std::string pack_parent_ = ""
     ) :
-        name{name_},
+        index_item(name_, pack_offset_),
         type{type_},
         size{size_},
         pack_size{pack_size_},
-        pack_offset{pack_offset_},
         pack_depth{pack_depth_},
         pack_parent{pack_parent_}
     {}
-
-    auto get_name() const {
-        return name;
-    }
 
     auto get_type() const {
         return type;
@@ -55,10 +70,6 @@ public:
 
     auto get_pack_size() {
         return pack_size;
-    }
-
-    auto get_pack_offset() {
-        return pack_offset;
     }
 
     auto get_pack_depth() {
@@ -76,13 +87,20 @@ class index_reader_base {
     using index_t = INDEX;
 
     static const index_t SUMMARY_OFFSET = 8;
-    static const index_t SUMMARY_SIZE = 256 * 4;
+    static const index_t SUMMARY_ENTRY_SIZE = 4;
+    static const index_t SUMMARY_SIZE = 256 * SUMMARY_ENTRY_SIZE;
+
     static const index_t NAMES_OFFSET = SUMMARY_OFFSET + SUMMARY_SIZE;
     static const index_t NAME_SIZE = 20;
+
+    static const index_t CRC_SIZE = 4;
+    static const index_t OFFSET_SIZE = 4;
 
     mutable stream_t input;
 
     std::array<index_t, 256> summary;
+    index_t start_crcs = 0;
+    index_t start_offsets = 0;
 
     int get_next(int i) {}
     int get_prev(int i) {}
@@ -118,9 +136,13 @@ class index_reader_base {
         }
     }
 
-    std::string read_name(index_t i) const {
+    static constexpr index_t name_location(unsigned index) {
+        return NAMES_OFFSET + NAME_SIZE * index;
+    }
+
+    std::string read_name(index_t index) const {
         input.clear();
-        input.seekg(NAMES_OFFSET + 20 * i, std::ios::beg);
+        input.seekg(name_location(index), std::ios::beg);
 
         char buffer[NAME_SIZE];
         input.read(buffer, NAME_SIZE);
@@ -144,6 +166,35 @@ class index_reader_base {
         } else {
             return 'a' + (v - 10);
         }
+    }
+
+    template <typename UNSIGNED_TYPE>
+    typename std::enable_if<std::is_unsigned<UNSIGNED_TYPE>::value, UNSIGNED_TYPE>::type read_netorder_at(unsigned position) const {
+        input.seekg(position, std::ios_base::beg);
+        UNSIGNED_TYPE result = 0;
+        char buffer[sizeof(UNSIGNED_TYPE)];
+        input.read(buffer, sizeof(buffer));
+        for (uint8_t val : buffer) {
+            result <<= 8;
+            result += val;
+        }
+        return result;
+    }
+
+    auto crc_location(unsigned index) const {
+        return start_crcs + index * CRC_SIZE;
+    }
+
+    auto read_crc(unsigned index) const {
+        return read_netorder_at<uint32_t>(crc_location(index));
+    }
+
+    auto offset_location(unsigned index) const {
+        return start_offsets + index * OFFSET_SIZE;
+    }
+
+    auto read_offset(unsigned index) const {
+        return read_netorder_at<uint32_t>(offset_location(index));
     }
 
 public:
@@ -206,7 +257,8 @@ public:
 
     auto operator[](int index) const {
         return value_type{
-            read_name(index)
+            read_name(index),
+            read_offset(index)
         };
     }
 
@@ -216,6 +268,8 @@ public:
     {
         init();
         load_summary();
+        start_crcs = name_location(size());
+        start_offsets = crc_location(size());
     }
 
     index_t size() const {

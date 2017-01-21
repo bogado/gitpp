@@ -24,25 +24,20 @@ void pack_data_test() {
         it("Item collection has expeced size", [&]{
             AssertThat(index_file_container.size(), Equals(std::distance(expected_begin, expected_end)));
         });
-        it("Item collecting names matches expected content", [&]() {
+        it("Check Items collected:", [&]() {
             auto expected = expected_begin;
+            int i = 0;
+            std::stringstream item_desc;
             for (auto obj_loader : index_file_container) {
-                AssertThat(expected, Is().Not().EqualTo(expected_end));
-                AssertThat(obj_loader.get_name(), Equals(expected->name));
-                expected++;
-            }
-        });
-        it("Item collecting type matches expected content", [&]() {
-            auto expected = expected_begin;
-            for (auto obj_loader : index_file_container) {
-                AssertThat(obj_loader.get_type(), Equals(expected->type));
-                expected++;
-            }
-        });
-        it("Item collecting size matches expected content", [&]() {
-            auto expected = expected_begin;
-            for (auto obj_loader : index_file_container) {
-                AssertThat(obj_loader.get_pack_size(), Equals(expected->pack_size));
+                item_desc.str("");
+                item_desc << "Item " << i;
+                i++;
+                it(item_desc.str().c_str(), [&]() {
+                    AssertThat(expected, Is().Not().EqualTo(expected_end));
+                    AssertThat(obj_loader.get_name(), Equals(expected->name));
+                    AssertThat(obj_loader.get_pack_offset(), Equals(expected->offset));
+
+                });
                 expected++;
             }
         });
