@@ -59,6 +59,12 @@ public:
     }
 };
 
+class pack_loader : public file_loader  {
+    pack_index index;
+public:
+
+};
+
 }
 
 #endif

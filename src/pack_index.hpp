@@ -5,6 +5,7 @@
 
 #include <vector>
 #include <sstream>
+#include <utility>
 
 namespace git {
 
@@ -31,27 +32,132 @@ public:
 
 };
 
+template <class SOURCE>
+class indexed_iterator {
+public:
+    using index_type = typename SOURCE::index_type;
+    using value_type = typename SOURCE::value_type;
+    using reference = value_type&;
+    using pointer   = value_type*;
+
+private:
+    index_type index;
+    SOURCE& source;
+
+public:
+    indexed_iterator(index_type start, SOURCE& ret) :
+        index(start),
+        source(ret) {}
+
+    auto operator++() {
+        index++;
+        return this;
+    }
+
+    auto operator++(int) {
+        auto result = *this;
+        index++;
+        return result;
+    }
+
+    auto operator--() {
+        index--;
+        return this;
+    }
+
+    auto operator--(int) {
+        auto result = *this;
+        index--;
+        return result;
+    }
+
+    auto operator*() const {
+        return source[index];
+    }
+
+    bool operator==(const indexed_iterator& other) const {
+        return &source == &other.source && index == other.index;
+    }
+
+    bool operator!=(const indexed_iterator& other) const {
+        return !(*this == other);
+    }
+
+    index_type current_index() {
+        return index;
+    }
+};
+
+namespace {
+    template <typename UNSIGNED_TYPE, typename STREAM>
+    auto read_netorder_at(STREAM& input, typename STREAM::pos_type position)
+        -> typename std::enable_if<std::is_unsigned<UNSIGNED_TYPE>::value, UNSIGNED_TYPE>::type
+    {
+        input.seekg(position, std::ios_base::beg);
+        UNSIGNED_TYPE result = 0;
+        uint8_t buffer[sizeof(UNSIGNED_TYPE)];
+        input.read(reinterpret_cast<char*>(buffer), sizeof(buffer));
+
+        return utils::from_buffer<UNSIGNED_TYPE>(buffer);
+    }
+}
+
+template <class SOURCE,
+         class VALUE_TYPE,
+         class ITERATOR = indexed_iterator<SOURCE>>
+class index_iterable {
+    SOURCE& base;
+public:
+    index_iterable(SOURCE& b) :
+        base(b)
+    {}
+
+    using value_type = VALUE_TYPE;
+    using reference = value_type&;
+    using pointer = value_type*;
+    using iterator = ITERATOR;
+
+    iterator begin() const {
+        return iterator {0, base};
+    }
+
+    iterator end() const {
+        return iterator {base.size(), base};
+    }
+};
+
 // TODO: no support for > 4gb packages
-template <class STREAM, typename INDEX = size_t>
-class index_reader_base {
+template <class STREAM, typename INDEX_T = size_t>
+class index_reader_base :
+    public index_iterable<index_reader_base<STREAM, INDEX_T>, index_item>
+{
+    using ITERABLE = index_iterable<index_reader_base<STREAM, INDEX_T>, index_item>;
+
+public:
+    using index_type = INDEX_T;
+    using value_type = index_item;
+    using reference  = typename ITERABLE::reference;
+    using pointer    = typename ITERABLE::pointer;
+
+
+private:
     using stream_t = STREAM;
-    using index_t = INDEX;
-
-    static const index_t SUMMARY_OFFSET = 8;
-    static const index_t SUMMARY_ENTRY_SIZE = 4;
-    static const index_t SUMMARY_SIZE = 256 * SUMMARY_ENTRY_SIZE;
-
-    static const index_t NAMES_OFFSET = SUMMARY_OFFSET + SUMMARY_SIZE;
-    static const index_t NAME_SIZE = 20;
-
-    static const index_t CRC_SIZE = 4;
-    static const index_t OFFSET_SIZE = 4;
 
     mutable stream_t input;
 
-    std::array<index_t, 256> summary;
-    index_t start_crcs = 0;
-    index_t start_offsets = 0;
+    static const index_type SUMMARY_OFFSET = 8;
+    static const index_type SUMMARY_ENTRY_SIZE = 4;
+    static const index_type SUMMARY_SIZE = 256 * SUMMARY_ENTRY_SIZE;
+
+    static const index_type NAMES_OFFSET = SUMMARY_OFFSET + SUMMARY_SIZE;
+    static const index_type NAME_SIZE = 20;
+
+    static const index_type CRC_SIZE = 4;
+    static const index_type OFFSET_SIZE = 4;
+
+    std::array<index_type, 256> summary;
+    index_type start_crcs = 0;
+    index_type start_offsets = 0;
 
     void init() {
         static constexpr char V2_HEADER[] = { -1, 116, 79, 99};
@@ -71,7 +177,7 @@ class index_reader_base {
 
     void load_summary() {
         static const size_t size = 4;
-        index_t acc;
+        index_type acc;
         char buffer[size];
 
         for (auto& entry: summary) {
@@ -84,11 +190,11 @@ class index_reader_base {
         }
     }
 
-    static constexpr index_t name_location(unsigned index) {
+    static constexpr index_type name_location(unsigned index) {
         return NAMES_OFFSET + NAME_SIZE * index;
     }
 
-    std::string read_name(index_t index) const {
+    std::string read_name(index_type index) const {
         input.clear();
         input.seekg(name_location(index), std::ios::beg);
 
@@ -116,22 +222,12 @@ class index_reader_base {
         }
     }
 
-    template <typename UNSIGNED_TYPE>
-    typename std::enable_if<std::is_unsigned<UNSIGNED_TYPE>::value, UNSIGNED_TYPE>::type read_netorder_at(unsigned position) const {
-        input.seekg(position, std::ios_base::beg);
-        UNSIGNED_TYPE result = 0;
-        uint8_t buffer[sizeof(UNSIGNED_TYPE)];
-        input.read(reinterpret_cast<char*>(buffer), sizeof(buffer));
-
-        return utils::from_buffer<UNSIGNED_TYPE>(buffer);
-    }
-
     auto crc_location(unsigned index) const {
         return start_crcs + index * CRC_SIZE;
     }
 
     auto read_crc(unsigned index) const {
-        return read_netorder_at<uint32_t>(crc_location(index));
+        return read_netorder_at<uint32_t>(input, crc_location(index));
     }
 
     auto offset_location(unsigned index) const {
@@ -139,68 +235,11 @@ class index_reader_base {
     }
 
     auto read_offset(unsigned index) const {
-        return read_netorder_at<uint32_t>(offset_location(index));
+        return read_netorder_at<uint32_t>(input, offset_location(index));
     }
 
 public:
-    class iterator {
-        using container_ref = const index_reader_base&;
-        index_t index;
-        container_ref reader;
-    public:
-
-        iterator(index_t start, container_ref ref) :
-            index(start),
-            reader(ref) {}
-
-        auto operator++() {
-            index++;
-            return this;
-        }
-
-        auto operator++(int) {
-            auto result = *this;
-            index++;
-            return result;
-        }
-
-        auto operator--() {
-            index--;
-            return this;
-        }
-
-        auto operator--(int) {
-            auto result = *this;
-            index--;
-            return result;
-        }
-
-        auto operator*() const {
-            return reader[index];
-        }
-
-        bool operator==(const iterator& other) const {
-            return index == other.index && (&reader == &other.reader);
-        }
-
-        bool operator!=(const iterator& other) const {
-            return !(*this == other);
-        }
-    };
-
-    using value_type = index_item;
-    using reference = index_item&;
-    using pointer = index_item*;
-
-    iterator begin() const {
-        return iterator {0, *this};
-    }
-
-    iterator end() const {
-        return iterator {size(), *this};
-    }
-
-    auto operator[](int index) const {
+    auto operator[](index_type index) const {
         return value_type{
             read_name(index),
             read_offset(index)
@@ -208,8 +247,9 @@ public:
     }
 
     template <typename... ARGS>
-    index_reader_base(ARGS... args) :
-        input(args...)
+    index_reader_base(ARGS && ... args) :
+        ITERABLE(*this),
+        input(std::forward<ARGS>(args)...)
     {
         init();
         load_summary();
@@ -217,7 +257,7 @@ public:
         start_offsets = crc_location(size());
     }
 
-    index_t size() const {
+    index_type size() const {
         return summary.back();
     }
 
