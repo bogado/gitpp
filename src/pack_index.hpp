@@ -2,6 +2,8 @@
 #define PACK_INDEX_HPP_INCLUDED
 
 #include "buffer.hpp"
+#include "indexed_iterator.hpp"
+#include "iohelper.hpp"
 
 #include <vector>
 #include <sstream>
@@ -30,100 +32,6 @@ public:
         return pack_offset;
     }
 
-};
-
-template <class SOURCE>
-class indexed_iterator {
-public:
-    using index_type = typename SOURCE::index_type;
-    using value_type = typename SOURCE::value_type;
-    using reference = value_type&;
-    using pointer   = value_type*;
-
-private:
-    index_type index;
-    SOURCE& source;
-
-public:
-    indexed_iterator(index_type start, SOURCE& ret) :
-        index(start),
-        source(ret) {}
-
-    auto operator++() {
-        index++;
-        return this;
-    }
-
-    auto operator++(int) {
-        auto result = *this;
-        index++;
-        return result;
-    }
-
-    auto operator--() {
-        index--;
-        return this;
-    }
-
-    auto operator--(int) {
-        auto result = *this;
-        index--;
-        return result;
-    }
-
-    auto operator*() const {
-        return source[index];
-    }
-
-    bool operator==(const indexed_iterator& other) const {
-        return &source == &other.source && index == other.index;
-    }
-
-    bool operator!=(const indexed_iterator& other) const {
-        return !(*this == other);
-    }
-
-    index_type current_index() {
-        return index;
-    }
-};
-
-namespace {
-    template <typename UNSIGNED_TYPE, typename STREAM>
-    auto read_netorder_at(STREAM& input, typename STREAM::pos_type position)
-        -> typename std::enable_if<std::is_unsigned<UNSIGNED_TYPE>::value, UNSIGNED_TYPE>::type
-    {
-        input.seekg(position, std::ios_base::beg);
-        UNSIGNED_TYPE result = 0;
-        uint8_t buffer[sizeof(UNSIGNED_TYPE)];
-        input.read(reinterpret_cast<char*>(buffer), sizeof(buffer));
-
-        return utils::from_buffer<UNSIGNED_TYPE>(buffer);
-    }
-}
-
-template <class SOURCE,
-         class VALUE_TYPE,
-         class ITERATOR = indexed_iterator<SOURCE>>
-class index_iterable {
-    SOURCE& base;
-public:
-    index_iterable(SOURCE& b) :
-        base(b)
-    {}
-
-    using value_type = VALUE_TYPE;
-    using reference = value_type&;
-    using pointer = value_type*;
-    using iterator = ITERATOR;
-
-    iterator begin() const {
-        return iterator {0, base};
-    }
-
-    iterator end() const {
-        return iterator {base.size(), base};
-    }
 };
 
 // TODO: no support for > 4gb packages
