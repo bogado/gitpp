@@ -30,10 +30,12 @@ struct Stringizer<std::string> {
 #define TESTS_READY
 
 void big_unsigned_test();
+void pack_index_test();
 void pack_data_test();
 
 go_bandit([]{
     big_unsigned_test();
+    pack_index_test();
     pack_data_test();
 });
 

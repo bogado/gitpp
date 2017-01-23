@@ -11,6 +11,8 @@
 
 namespace git {
 
+constexpr auto INDEX_FILE_EXTENSION = ".idx";
+
 class index_item {
     std::string name;
     size_t pack_offset;
@@ -37,9 +39,9 @@ public:
 // TODO: no support for > 4gb packages
 template <class STREAM, typename INDEX_T = size_t>
 class index_reader_base :
-    public index_iterable<index_reader_base<STREAM, INDEX_T>, index_item>
+    public index_iterable<index_reader_base<STREAM, INDEX_T>, INDEX_T>
 {
-    using ITERABLE = index_iterable<index_reader_base<STREAM, INDEX_T>, index_item>;
+    using ITERABLE = index_iterable<index_reader_base<STREAM, INDEX_T>, INDEX_T>;
 
 public:
     using index_type = INDEX_T;
@@ -147,13 +149,6 @@ private:
     }
 
 public:
-    auto operator[](index_type index) const {
-        return value_type{
-            read_name(index),
-            read_offset(index)
-        };
-    }
-
     template <typename... ARGS>
     index_reader_base(ARGS && ... args) :
         ITERABLE(*this),
@@ -163,6 +158,13 @@ public:
         load_summary();
         start_crcs = name_location(size());
         start_offsets = crc_location(size());
+    }
+
+    auto operator[](index_type index) const {
+        return value_type{
+            read_name(index),
+            read_offset(index)
+        };
     }
 
     index_type size() const {

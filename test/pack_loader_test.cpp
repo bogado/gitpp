@@ -1,45 +1,33 @@
-#include "pack_index.hpp"
-#include "sample-pack-data.hpp"
+#include "pack_loader.hpp"
+
+#include "object_tests.hpp"
 
 #include <iostream>
 #include <fstream>
 
 #include <bandit/bandit.h>
 
+#include "sample-pack-data.hpp"
+
 using namespace git;
 using namespace bandit;
 
-const static std::string SAMPLE_PACK_FILE(TEST_RESOURCE_PATH "/sample_pack.pack");
-const static std::string SAMPLE_INDEX_FILE(TEST_RESOURCE_PATH "/sample_pack.idx");
+const static std::string SAMPLE_PACK_FILE_BASE(TEST_RESOURCE_PATH "/sample_pack");
 
 void pack_data_test() {
-    const static std::string PACK_FILE(SAMPLE_PACK_FILE);
-    const static std::string INDEX_FILE(SAMPLE_INDEX_FILE);
 
-    auto expected_begin = std::begin(data::get_expected_objects());
-    auto expected_end   = std::end(data::get_expected_objects());
-
-    describe("loading package files indexes test", [&]() {
-        auto index_file_container = index_file_parser(INDEX_FILE);
-        it("Item collection has expeced size", [&]{
-            AssertThat(index_file_container.size(), Equals(std::distance(expected_begin, expected_end)));
-        });
-        it("Check Items collected:", [&]() {
-            auto expected = expected_begin;
-            int i = 0;
-            std::stringstream item_desc;
-            for (auto obj_loader : index_file_container) {
-                item_desc.str("");
-                item_desc << "Item " << i;
-                i++;
-                it(item_desc.str().c_str(), [&]() {
-                    AssertThat(expected, Is().Not().EqualTo(expected_end));
-                    AssertThat(obj_loader.get_name(), Equals(expected->name));
-                    AssertThat(obj_loader.get_pack_offset(), Equals(expected->offset));
-
-                });
-                expected++;
+    describe("loading pack files test", [&]() {
+        auto pack_file_container = pack_file_parser(SAMPLE_PACK_FILE_BASE);
+        test_collected("pack loader", pack_file_container, data::get_expected_objects(),
+            [&](auto& obtained, auto& expected) {
+                AssertThat(obtained.get_name(), Equals(expected->name))
+                AssertThat(obtained.get_pack_offset(), Equals(expected->offset));
+                AssertThat(obtained.get_type(), Equals(expected->type));
+                AssertThat(obtained.get_size(), Equals(expected->size));
+                AssertThat(obtained.get_pack_size(), Equals(expected->pack_size));
+                AssertThat(obtained.get_pack_depth(), Equals(expected->depth));
+                AssertThat(obtained.get_pack_parent(), Equals(expected->parent));
             }
-        });
+        );
     });
 }

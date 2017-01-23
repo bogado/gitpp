@@ -10,10 +10,10 @@ struct expected_objects {
     size_t pack_size;
     size_t offset;
     size_t depth;
-    std::string origin;
+    std::string parent;
 };
 
-const std::vector<expected_objects>& get_expected_objects() {
+inline const std::vector<expected_objects>& get_expected_objects() {
     static const std::vector<expected_objects> data {
         { "31b3469089c90a7d1e1177a38a07e6be9b0c4e6f", "commit",  76,  88,  449, 1,  "fc4f86dd288c1286cf2fd5c8f34cc1e43351c79b" },
         { "3bb2a5be07fc75b1edfecd7ade1b29261850526e", "commit", 258, 175,  537 },

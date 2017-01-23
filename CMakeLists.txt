@@ -3,7 +3,12 @@ cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
 include_directories(src)
 enable_testing()
 
-add_executable(gitpp_test test/test.cpp test/big_unsigned_test.cpp test/pack_loader_test.cpp)
+add_executable(gitpp_test
+    test/test.cpp
+    test/big_unsigned_test.cpp
+    test/pack_index_test.cpp
+    test/pack_loader_test.cpp
+)
 
 include_directories(TARGET gitpp_test vendor/bandit)
 set_property(TARGET gitpp_test PROPERTY COMPILE_OPTIONS --std=c++1z)
