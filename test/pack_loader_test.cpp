@@ -26,7 +26,11 @@ void pack_data_test() {
                 AssertThat(obtained.get_size(), Equals(expected->size));
                 AssertThat(obtained.get_pack_size(), Equals(expected->pack_size));
                 AssertThat(obtained.get_pack_depth(), Equals(expected->depth));
-                AssertThat(obtained.get_pack_parent(), Equals(expected->parent));
+                if (obtained.get_delta_parent()) {
+                    AssertThat(obtained.get_delta_parent().get_name(), Equals(expected->parent));
+                } else {
+                    AssertThat("", Equals(expected->parent));
+                }
             }
         );
     });

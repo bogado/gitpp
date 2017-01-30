@@ -8,10 +8,12 @@
 #include <vector>
 #include <sstream>
 #include <utility>
+#include <algorithm>
 
 namespace git {
 
 constexpr auto INDEX_FILE_EXTENSION = ".idx";
+constexpr auto GIT_OBJECT_NAME_SIZE = 20;
 
 class index_item {
     std::string name;
@@ -26,15 +28,67 @@ public:
         pack_offset(offset_)
     {}
 
+    explicit index_item(size_t offset_) :
+        index_item{"", offset_}
+    {}
+
+    index_item operator-(size_t diff) const {
+        if (diff == 0) {
+            return *this;
+        }
+        return index_item{ pack_offset - diff };
+    }
+
     auto get_name() const {
         return name;
     }
 
-    auto get_pack_offset() {
+    auto get_pack_offset() const {
         return pack_offset;
     }
 
+    operator bool() const {
+        return pack_offset != 0;
+    }
+
+    // TODO: different implementations of this index item for each type of offset.
+    template <typename STREAM>
+    void seek_stream(STREAM& input) const {
+        if (!*this) {
+            return;
+        }
+        input.clear();
+        input.seekg(pack_offset, std::ios_base::beg);
+    }
 };
+
+namespace {
+char hex_digit (unsigned v) {
+    v &= 0x0f;
+    if (v < 10) {
+        return '0' + v;
+    } else {
+        return 'a' + (v - 10);
+    }
+}
+}
+
+template <class STREAM>
+std::string read_name_from(STREAM& input) {
+    char buffer[GIT_OBJECT_NAME_SIZE];
+    input.read(buffer, GIT_OBJECT_NAME_SIZE);
+
+    std::string result(GIT_OBJECT_NAME_SIZE * 2, ' ');
+    auto it = result.begin();
+    for (char v: buffer) {
+        *it = hex_digit(v >> 4);
+        it++;
+        *it = hex_digit(v & 0x0f);
+        it++;
+    }
+
+    return result;
+}
 
 // TODO: no support for > 4gb packages
 template <class STREAM, typename INDEX_T = size_t>
@@ -49,6 +103,8 @@ public:
     using reference  = typename ITERABLE::reference;
     using pointer    = typename ITERABLE::pointer;
 
+    using ITERABLE::begin;
+    using ITERABLE::end;
 
 private:
     using stream_t = STREAM;
@@ -60,7 +116,7 @@ private:
     static const index_type SUMMARY_SIZE = 256 * SUMMARY_ENTRY_SIZE;
 
     static const index_type NAMES_OFFSET = SUMMARY_OFFSET + SUMMARY_SIZE;
-    static const index_type NAME_SIZE = 20;
+    static const index_type NAME_SIZE = GIT_OBJECT_NAME_SIZE;
 
     static const index_type CRC_SIZE = 4;
     static const index_type OFFSET_SIZE = 4;
@@ -107,29 +163,7 @@ private:
     std::string read_name(index_type index) const {
         input.clear();
         input.seekg(name_location(index), std::ios::beg);
-
-        char buffer[NAME_SIZE];
-        input.read(buffer, NAME_SIZE);
-
-        std::string result(NAME_SIZE * 2, ' ');
-        auto it = result.begin();
-        for (char v: buffer) {
-            *it = digit(v >> 4);
-            it++;
-            *it = digit(v & 0x0f);
-            it++;
-        }
-
-        return result;
-    }
-
-    static char digit (unsigned v) {
-        v &= 0x0f;
-        if (v < 10) {
-            return '0' + v;
-        } else {
-            return 'a' + (v - 10);
-        }
+        return read_name_from(input);
     }
 
     auto crc_location(unsigned index) const {
@@ -161,10 +195,25 @@ public:
     }
 
     auto operator[](index_type index) const {
-        return value_type{
-            read_name(index),
-            read_offset(index)
-        };
+        value_type result;
+        if (index < size()) {
+            result = value_type {
+                read_name(index),
+                read_offset(index)
+            };
+        }
+        return result;
+    }
+
+    auto operator[](std::string name) const {
+        auto found = std::lower_bound(begin(), end(), value_type{name, 0}, [](const auto &a, const auto& b) {
+            return a.get_name() < b.get_name();
+        });
+        if (found == end() || (*found).get_name() != name) {
+            return index_item{};
+        } else {
+            return *found;
+        }
     }
 
     index_type size() const {

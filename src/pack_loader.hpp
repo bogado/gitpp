@@ -9,8 +9,10 @@
 #include <fstream>
 #include <string>
 #include <utility>
+#include <tuple>
 
 #include "filesystem.hpp"
+
 #include "pack_index.hpp"
 #include "big_unsigned.hpp"
 
@@ -23,7 +25,7 @@ class object_description : public index_item {
     size_t size;
     size_t pack_size;
     size_t pack_depth;
-    std::string pack_parent;
+    index_item delta_parent;
 public:
 
     object_description(
@@ -33,14 +35,14 @@ public:
         size_t pack_size_ = 0,
         size_t pack_offset_ = 0,
         size_t pack_depth_ = 0,
-        std::string pack_parent_ = ""
+        index_item parent = index_item{}
     ) :
         index_item(name_, pack_offset_),
         type{type_},
         size{size_},
         pack_size{pack_size_},
         pack_depth{pack_depth_},
-        pack_parent{pack_parent_}
+        delta_parent{parent}
     {}
 
     const std::string& get_type() const {
@@ -59,8 +61,8 @@ public:
         return pack_depth;
     }
 
-    auto get_pack_parent() {
-        return pack_parent;
+    auto get_delta_parent() {
+        return delta_parent;
     }
 };
 
@@ -69,12 +71,8 @@ template <class STREAM, typename INDEX_T = size_t>
 class pack_loader :
     public index_iterable<pack_loader<STREAM, INDEX_T>, INDEX_T>
 {
-    static constexpr auto INFORMATION_BITS = 3;
-
     using ITERABLE = index_iterable<pack_loader<STREAM, INDEX_T>, INDEX_T>;
     using index_parser_type = index_reader_base<STREAM, INDEX_T>;
-
-    using git_big_unsigned = big_unsigned_base<uint8_t, INFORMATION_BITS>;
 
     enum git_internal_type {
         COMMIT = 1,
@@ -85,27 +83,38 @@ class pack_loader :
         DELTA_WITH_OBJID  = 7
     };
 
-    static git_internal_type make_type(const git_big_unsigned& size_type) {
-        uint8_t type_id = size_type.get_reserved_bits();
-        return static_cast<git_internal_type>(type_id);
+    static bool is_delta(git_internal_type type) {
+        return type == DELTA_WITH_OFFSET || type == DELTA_WITH_OBJID;
     }
 
-    static const std::string& get_type_name(git_internal_type type) {
+    static const std::string& type_name(git_internal_type type) {
         static const std::string TYPES[] = {
             "invalid",
             "commit",
             "tree",
             "blob",
-            "tag"
+            "tag",
+            "invalid(5)",
+            "delta by offset",
+            "delta by object id"
         };
 
         uint8_t index = static_cast<uint8_t>(type);
-        if (index > 4) {
-            index = 0;
-        }
-
         return TYPES[index];
-    };
+    }
+
+    const std::string& get_type_name(git_internal_type type, const index_item& parent) const {
+        if (is_delta(type)) {
+            size_t size;
+            git_internal_type parent_type;
+            index_item grand_parent;
+
+            std::tie(size, parent_type, grand_parent) = load_data(parent);
+
+            return get_type_name(parent_type, grand_parent);
+        }
+        return type_name(type);
+    }
 
 public:
     using stream_t = STREAM;
@@ -118,11 +127,32 @@ private:
     index_parser_type index_parser;
     mutable stream_t pack_input;
 
-    git_big_unsigned get_size_and_type(size_t offset) const {
-        pack_input.seekg(offset, std::ios::beg);
-        git_big_unsigned result;
+    auto load_data(const index_item& item) const {
+        item.seek_stream(pack_input);
+
+        big_unsigned_with_type result;
         result.binread(pack_input);
-        return result;
+
+        uint8_t type_id = result.get_reserved_bits();
+        auto type = static_cast<git_internal_type>(type_id);
+        size_t size = result.template convert<size_t>();
+
+        index_item parent;
+        if (is_delta(type)) {
+            if (type == DELTA_WITH_OFFSET) {
+                big_unsigned offset;
+                offset.binread(pack_input);
+                parent = item - offset.template convert<size_t>();
+            } else {
+                std::string parent_name = read_name_from(pack_input);
+                parent = index_parser[parent_name];
+                if (!parent) {
+                    throw "broke!";
+                }
+            }
+        }
+
+        return std::make_tuple(size, type, parent);
     }
 
 public:
@@ -138,18 +168,23 @@ public:
         return index_parser.size();
     }
 
-    auto operator[](index_type index) const {
-        auto index_item = index_parser[index];
-        auto size_type = get_size_and_type(index_item.get_pack_offset());
+    template <typename ITEM_ID>
+    auto operator[](ITEM_ID index) const {
+        auto index_found = index_parser[index];
+        size_t size;
+        git_internal_type type;
+        index_item parent;
+
+        std::tie(size, type, parent) = load_data(index_found);
 
         return value_type{
-            index_item.get_name(),
-            get_type_name(make_type(size_type)), // TODO: read type.
-            size_type.template convert<size_t>(),  // TODO: read size.
+            index_found.get_name(),
+            get_type_name(type, parent), // TODO: read type.
+            size,  // TODO: read size.
             0,  // TODO: read pack size.
-            index_item.get_pack_offset(),
-            0,  // TODO: offset.
-            ""  // TODO: parent.
+            index_found.get_pack_offset(),
+            0, // TODO: offset.
+            parent
         };
     }
 };

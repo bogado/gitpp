@@ -25,6 +25,18 @@ struct Stringizer<std::string> {
     }
 };
 
+template<>
+struct Stringizer<char> {
+    static std::string ToSting(char v) {
+        std::stringstream out;
+        if (std::isprint(v)) {
+            out << "'" << v <<"' ";
+        }
+        out << "(" << +v << ")";
+        return out.str();
+    }
+};
+
 }
 
 #define TESTS_READY
