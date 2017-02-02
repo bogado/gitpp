@@ -177,13 +177,13 @@ public:
 
         std::tie(size, type, parent) = load_data(index_found);
 
-        return value_type{
+        return value_type {
             index_found.get_name(),
             get_type_name(type, parent), // TODO: read type.
-            size,  // TODO: read size.
+            size,
             0,  // TODO: read pack size.
             index_found.get_pack_offset(),
-            0, // TODO: offset.
+            0, // TODO: depth.
             parent
         };
     }
