@@ -55,6 +55,19 @@ public:
         return (values.front() & reserved_mask) >> non_reserved_bits;
     }
 
+    void set_reserved_bits(unsigned value) {
+        value <<= non_reserved_bits;
+        value &= reserved_mask;
+
+        if (values.empty()) {
+            values.push_back(value);
+            return;
+        }
+
+        value |= (values.front() & ~(reserved_mask));
+        values.front() = value;
+    }
+
     void clear() {
         values.clear();
     }
@@ -268,7 +281,6 @@ public:
         dump(out);
         return out.str();
     }
-
 
 private:
 

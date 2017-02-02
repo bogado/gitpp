@@ -27,12 +27,20 @@ void big_unsigned_test() {
         0x20
     };
 
+    const static std::uint8_t num_32_WT[] = {
+        0x80, 0x02
+    };
+
     const static std::uint8_t num_255[] = {
         0x80, 0x7f
     };
 
     const static std::uint8_t num_255_BE[] = {
         0xff, 0x01
+    };
+
+    const static std::uint8_t num_255_WT[] = {
+        0x8f, 0x0f
     };
 
     const static std::uint8_t num_1025[] = {
@@ -43,6 +51,10 @@ void big_unsigned_test() {
         0x81, 0x08
     };
 
+    const static std::uint8_t num_1025_WT[] = {
+        0x81, 0x40
+    };
+
     const static std::uint8_t num_65536[] = {
         0x82, 0xff, 0x00
     };
@@ -51,12 +63,20 @@ void big_unsigned_test() {
         0x80, 0x80, 0x04
     };
 
+    const static std::uint8_t num_65536_WT[] = {
+        0x80, 0x80, 0x20
+    };
+
     const static std::uint8_t num_0x123456789abcdef[] = {
         0x80, 0x90, 0xd0, 0xab, 0xf7, 0xcc, 0xae, 0x9a, 0x6f
     };
 
     const static std::uint8_t num_0x123456789abcdef_BE[] = {
         0xef, 0x9b, 0xaf, 0xcd, 0xf8, 0xac, 0xd1, 0x91, 0x01
+    };
+
+    const static std::uint8_t num_0x123456789abcdef_WT[] = {
+        0x8f, 0xde, 0xf9, 0xea, 0xc4, 0xe7, 0x8a, 0x8d, 0x09
     };
 
     describe("big_unsigned tests", [&]() {
@@ -137,9 +157,34 @@ void big_unsigned_test() {
                              "0x123456789abcdef",
                  big_unsigned{0x123456789abcdef});
 
+        runTests(num_32_WT,   uint8_t(32),     "0x20",    big_unsigned_with_type{32});
+        runTests(num_255_WT,  uint8_t(255),    "0xff",    big_unsigned_with_type{255});
+        runTests(num_1025_WT, uint16_t(1025),  "0x401",   big_unsigned_with_type{1025});
+        runTests(num_65536_WT,uint32_t(65536), "0x10000", big_unsigned_with_type{65536});
+
+        runTests(num_32_WT,   uint64_t(32),    "0x20",    big_unsigned_with_type{32});
+        runTests(num_255_WT,  uint64_t(255),   "0xff",    big_unsigned_with_type{255});
+        runTests(num_1025_WT, uint64_t(1025),  "0x401",   big_unsigned_with_type{1025});
+        runTests(num_65536_WT,uint64_t(65536), "0x10000", big_unsigned_with_type{65536});
+
+        runTests(         num_0x123456789abcdef_WT,
+                     uint64_t(0x123456789abcdef),
+                             "0x123456789abcdef",
+                 big_unsigned_with_type{0x123456789abcdef});
+
         auto convert_all_directions = [&](auto value, auto test) {
             test = value;
             AssertThat(test.template convert<decltype(value)>(), Equals(value));
+        };
+
+        auto type_test = [&](auto value) {
+            big_unsigned_with_type test{value};
+
+            for (int val  = 0; val < (1 << GIT_TYPE_ENCODE_BITS); val++) {
+                test.set_reserved_bits(val);
+                AssertThat(test.get_reserved_bits(), Equals(val));
+                AssertThat(test.template convert<decltype(value)>(), Equals(value));
+            }
         };
 
         it("Back and forth conversion test", [&]() {
@@ -153,6 +198,16 @@ void big_unsigned_test() {
                 convert_all_directions(i * 0x7000000,     big_unsigned_big_endian{});
                 convert_all_directions(i * 0x7000000,     big_unsigned_big_endian{});
                 convert_all_directions(i * 0x56789abcdef, big_unsigned_big_endian{});
+                convert_all_directions(i * 7,             big_unsigned_with_type{});
+                convert_all_directions(i * 0x7000,        big_unsigned_with_type{});
+                convert_all_directions(i * 0x7000000,     big_unsigned_with_type{});
+                convert_all_directions(i * 0x7000000,     big_unsigned_with_type{});
+                convert_all_directions(i * 0x56789abcdef, big_unsigned_with_type{});
+                type_test(i * 7);
+                type_test(i * 0x7000);
+                type_test(i * 0x7000000);
+                type_test(i * 0x7000000);
+                type_test(i * 0x56789abcdef);
             }
         });
     });
