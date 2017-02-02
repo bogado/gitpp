@@ -4,17 +4,21 @@
 #include <cstdint>
 #include <limits>
 #include <iostream>
+#include <iomanip>
 #include <type_traits>
 #include <exception>
 #include <vector>
 #include <array>
 #include <typeinfo>
+#include <sstream>
+
+#include <boost/io/ios_state.hpp>
 
 namespace git {
 
 template <typename INT,
          unsigned reserved_bits = 0,
-         bool git_mode = true,
+         bool big_endian = false,
          class storage = std::vector<INT>,
          unsigned value_bits = sizeof(INT)*8 - 1,
          typename = typename std::enable_if<
@@ -40,6 +44,7 @@ class big_unsigned_base {
 
 public:
     using value_type = INT;
+    using big_unsigned_type = big_unsigned_base;
 
     static constexpr unsigned bits_per_unit = value_bits;
 
@@ -98,6 +103,129 @@ public:
         return s*bits_per_unit - reserved_bits;
     }
 
+/* comparison */
+    bool operator==(const big_unsigned_base& other) const {
+        if (other.values.size() != values.size()) {
+            return false;
+        }
+        return std::equal(std::begin(values), std::end(values), std::begin(other.values));
+    }
+
+
+/* encoding values -> big_unsigned */
+private:
+    constexpr void insert(value_type value) {
+        if (big_endian) {
+            if (!values.empty()) {
+                values.back() |= mask;
+            }
+            values.insert(std::end(values), value);
+        } else {
+            if (!values.empty()) {
+                value |= mask;
+            }
+            values.insert(std::begin(values), value);
+        }
+    }
+
+public:
+    template <typename T,
+              typename ENABLED = typename std::enable_if<
+                std::is_integral<T>::value>::type
+            >
+    big_unsigned_base& operator=(T value) {
+        clear();
+
+        insert(value & non_reserved_mask);
+        value >>= non_reserved_bits;
+        while (value > 0) {
+            if (!big_endian) { value--; }
+
+            insert(value & value_mask);
+            value >>= value_bits;
+        }
+        return *this;
+    }
+
+    template <typename T,
+              typename ENABLED = typename std::enable_if<
+                std::is_integral<T>::value>::type
+            >
+    explicit big_unsigned_base(T value) :
+        big_unsigned_base()
+    {
+        (*this) = value;
+    }
+
+    big_unsigned_base() = default;
+    big_unsigned_base(const big_unsigned_base&) = default;
+    big_unsigned_base(big_unsigned_base&&) = default;
+    big_unsigned_base& operator=(const big_unsigned_base&) = default;
+    big_unsigned_base& operator=(big_unsigned_base&&) = default;
+
+/* decoding big_unsigned => value */
+private:
+    template <typename T>
+    static constexpr T update_result(T old_result, value_type value, unsigned used_bits) {
+        uintmax_t result = old_result;
+
+        if (big_endian) {
+            result = result + (static_cast<T>(value) << used_bits);
+        } else {
+            result = ((result + 1) << bits_per_unit) + value;
+        }
+
+        if (result > std::numeric_limits<T>::max()) {
+            throw std::overflow_error((
+                        std::string("Not enough bit in conversion (")
+                        + std::to_string(result)
+                        + " > " +  std::to_string(std::numeric_limits<T>::max())
+                        + " " + typeid(T).name() + " )").c_str());
+        }
+        return static_cast<T>(result);
+    }
+
+public:
+    template <typename T>
+    T convert() const {
+        auto v = begin();
+
+        if (v == end()) {
+            return 0;
+        }
+
+        T result { static_cast<T>(non_reserved_mask & *v)};
+        if (is_terminator(*v)) {
+            return result;
+        }
+
+        unsigned used_bits = non_reserved_bits;
+
+        while (++v != end()) {
+
+            result = update_result(result, *v & value_mask, used_bits);
+
+            used_bits += bits_per_unit;
+
+            if (is_terminator(*v)) {
+                break;
+            }
+
+        }
+
+        return result;
+    }
+
+    /* I/O routines */
+    template <typename OStream>
+    friend OStream& operator<<(OStream& out, const big_unsigned_base& me) {
+        auto flags = out.flags();
+        auto value = me.convert<uintmax_t>();
+        out << "0x" << std::hex << value;
+        out.flags(flags);
+        return out;
+    }
+
     template <class IStream>
     void binread(IStream& in) {
         value_type val;
@@ -123,96 +251,24 @@ public:
     }
 
     template <typename stream>
-    void dump(stream& out) {
-        auto state = out.rdstate();
-        out << "[ " << std::hex;
+    void dump(stream& out) const {
+        boost::io::ios_flags_saver save(out);
+        out << "<" << (big_endian?"big_endian":"little_endian") << ", "
+            << reserved_bits << "+" << non_reserved_bits << ">[ ";
+        out << std::setfill('0');
+        std::hex(out);
         for (const auto& val : values) {
-            out << unsigned(val) << " ";
+            out << std::setw(sizeof(val)*2) << unsigned(val) << " ";
         }
         out << "]";
-        out.setstate(state);
     }
 
-public:
-    template <typename T,
-              typename ENABLED = typename std::enable_if<
-                std::is_integral<T>::value>::type
-            >
-    big_unsigned_base& operator=(T value) {
-        clear();
-        values.insert(std::begin(values), value & non_reserved_mask);
-        value >>= non_reserved_bits;
-        while (value > 0) {
-            if (git_mode) { value--; }
-            values.insert(std::begin(values), (value & value_mask) | mask);
-            value >>= value_bits;
-        }
-        return *this;
+    std::string dump() const {
+        std::stringstream out;
+        dump(out);
+        return out.str();
     }
 
-    template <typename T,
-              typename ENABLED = typename std::enable_if<
-                std::is_integral<T>::value>::type
-            >
-    explicit big_unsigned_base(T value) :
-        big_unsigned_base()
-    {
-        (*this) = value;
-    }
-
-    big_unsigned_base() = default;
-    big_unsigned_base(const big_unsigned_base&) = default;
-    big_unsigned_base(big_unsigned_base&&) = default;
-    big_unsigned_base& operator=(const big_unsigned_base&) = default;
-    big_unsigned_base& operator=(big_unsigned_base&&) = default;
-
-    template <typename T>
-    T convert() const {
-        static constexpr auto BITS = sizeof(T)*8;
-        auto v = begin();
-
-        if (v == end()) {
-            return 0;
-        }
-
-        T result = non_reserved_mask & *v;
-        if (is_terminator(*v)) {
-            return result;
-        }
-        unsigned used_bits = bits_used(result);
-
-        while (++v != end()) {
-            used_bits += bits_per_unit;
-            if (used_bits > BITS) {
-                throw std::overflow_error((
-                            std::string("Not enough bit in conversion (")
-                            + std::to_string(used_bits)
-                            + " > " + std::to_string(BITS)
-                            + " " + typeid(T).name() + " )").c_str());
-            }
-            result = ((result + (git_mode?1:0)) << bits_per_unit) + (*v & value_mask);
-            if (is_terminator(*v)) {
-                break;
-            }
-        }
-        return result;
-    }
-
-    template <typename Stream>
-    friend Stream& operator<<(Stream& out, const big_unsigned_base& me) {
-        auto flags = out.flags();
-        auto value = me.convert<uintmax_t>();
-        out << "0x" << std::hex << value;
-        out.flags(flags);
-        return out;
-    }
-
-    bool operator==(const big_unsigned_base& other) const {
-        if (other.values.size() != values.size()) {
-            return false;
-        }
-        return std::equal(std::begin(values), std::end(values), std::begin(other.values));
-    }
 
 private:
 
@@ -236,23 +292,12 @@ private:
     static constexpr bool is_terminator(value_type v) {
         return (v & mask) == 0;
     }
-
-    template <typename T>
-    static constexpr unsigned bits_used(T val) {
-        unsigned t = 0;
-        while (val > 0) {
-            val /= 2;
-            t++;
-        }
-        return t;
-    }
 };
 
-// TODO: this information should be else where.
 static constexpr auto GIT_TYPE_ENCODE_BITS = 3;
-using big_unsigned           = big_unsigned_base<std::uint8_t>;
-using big_unsigned_with_type = big_unsigned_base<std::uint8_t, GIT_TYPE_ENCODE_BITS>;
-using big_unsigned_non_git   = big_unsigned_base<std::uint8_t, 0, false>;
+using big_unsigned            = big_unsigned_base<std::uint8_t>;
+using big_unsigned_with_type  = big_unsigned_base<std::uint8_t, GIT_TYPE_ENCODE_BITS, true>;
+using big_unsigned_big_endian = big_unsigned_base<std::uint8_t, 0, true>;
 
 }
 
