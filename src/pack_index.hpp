@@ -71,6 +71,14 @@ char hex_digit (unsigned v) {
         return 'a' + (v - 10);
     }
 }
+
+uint8_t hex_value(char d) {
+    if (d >= 'a' && d <= 'f') { return d - 'a' + 10; }
+    if (d >= 'A' && d <= 'F') { return d - 'A' + 10; }
+    if (d >= '0' && d <= '9') { return d - '0'; }
+    return 0;
+}
+
 }
 
 template <class STREAM>
@@ -122,6 +130,7 @@ private:
     static const index_type OFFSET_SIZE = 4;
 
     std::array<index_type, 256> summary;
+
     index_type start_crcs = 0;
     index_type start_offsets = 0;
 
@@ -134,7 +143,7 @@ private:
         input.read(buffer.data(), buffer.size());
         if (!std::equal(buffer.begin(), buffer.end(), V2_HEADER)) {
             std::stringstream err;
-            err << "V1 index is not supported [ ";
+            err << "V1 index is not supported (yet) [ ";
             for (auto &val : buffer) { err << +val << " "; }
             err << "]";
             throw std::invalid_argument(err.str());
@@ -145,6 +154,8 @@ private:
         static const size_t size = 4;
         index_type acc;
         char buffer[size];
+
+        input.seekg(SUMMARY_OFFSET, std::ios::beg);
 
         for (auto& entry: summary) {
             input.read(buffer, size);
@@ -206,7 +217,12 @@ public:
     }
 
     auto operator[](std::string name) const {
-        auto found = std::lower_bound(begin(), end(), value_type{name, 0}, [](const auto &a, const auto& b) {
+        uint8_t first = hex_value(name[0]) * 16 + hex_value(name[1]);
+
+        auto start = begin() + (first > 0 ? summary[first-1] : 0);
+        auto finish = start + (summary[first] - summary[first-1]);
+
+        auto found = std::lower_bound(start, finish, value_type{name, 0}, [](const auto &a, const auto& b) {
             return a.get_name() < b.get_name();
         });
         if (found == end() || (*found).get_name() != name) {
