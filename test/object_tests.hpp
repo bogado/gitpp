@@ -5,8 +5,6 @@
 
 #include <bandit/bandit.h>
 
-using namespace bandit;
-
 template <typename COLLECTED, typename CHECK, typename EXPECTED>
 void test_collected(std::string description, COLLECTED& items, const EXPECTED& expected_objects, CHECK check) {
     auto expected_begin = std::begin(expected_objects);
@@ -16,7 +14,7 @@ void test_collected(std::string description, COLLECTED& items, const EXPECTED& e
     std::stringstream it_desc;
 
     it_desc << description << ": expected size";
-    it(it_desc.str().c_str(), [&]{
+    bandit::it(it_desc.str().c_str(), [&]{
         AssertThat(items.size(), Equals(std::distance(expected_begin, expected_end)));
     });
 
@@ -24,9 +22,9 @@ void test_collected(std::string description, COLLECTED& items, const EXPECTED& e
     for(auto item : items) {
         it_desc.str("");
         it_desc << description << ": item #" << i++;
-        AssertThat(expected, Is().Not().EqualTo(expected_end));
 
-        it(it_desc.str().c_str(), [&]() {
+        bandit::it(it_desc.str().c_str(), [&]() {
+            AssertThat(expected, Is().Not().EqualTo(expected_end));
             check(item, expected);
         });
         expected++;

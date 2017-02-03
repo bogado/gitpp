@@ -105,17 +105,18 @@ class pack_loader :
         return TYPES[index];
     }
 
-    const std::string& get_type_name(git_internal_type type, const index_item& parent) const {
-        if (is_delta(type)) {
-            size_t size;
-            git_internal_type parent_type;
-            index_item grand_parent;
-
-            std::tie(size, parent_type, grand_parent) = load_data(parent);
-
-            return get_type_name(parent_type, grand_parent);
+    auto get_type_and_depth(git_internal_type type, const index_item& parent, unsigned depth = 0) const {
+        if (!is_delta(type)) {
+            return std::make_pair(type, depth);
         }
-        return type_name(type);
+
+        size_t size;
+        git_internal_type parent_type;
+        index_item grand_parent;
+
+        std::tie(size, parent_type, grand_parent) = load_data(parent);
+
+        return get_type_and_depth(parent_type, grand_parent, depth + 1);
     }
 
 public:
@@ -190,19 +191,21 @@ public:
     auto operator[](ITEM_ID index) const {
         auto index_found = index_parser[index];
         size_t size;
+        unsigned depth;
         git_internal_type type;
         index_item parent;
 
         std::tie(size, type, parent) = load_data(index_found);
+        std::tie(type, depth) = get_type_and_depth(type, parent);
 
         return value_type {
             index_found.get_name(),
-            get_type_name(type, parent),
+            type_name(type),
             size,
             index_found.get_pack_offset(),
             read_pack_size(index_found),
             index_found.get_crc(),
-            0, // TODO: depth.
+            depth, // TODO: depth.
             parent
         };
     }

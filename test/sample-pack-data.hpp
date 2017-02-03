@@ -13,6 +13,9 @@ struct expected_objects {
     std::string parent;
 };
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+
 inline const std::vector<expected_objects>& get_expected_objects() {
     static const std::vector<expected_objects> data {
         { "31b3469089c90a7d1e1177a38a07e6be9b0c4e6f", "commit",  76,  88,  449, 1,  "fc4f86dd288c1286cf2fd5c8f34cc1e43351c79b" },
@@ -33,6 +36,8 @@ inline const std::vector<expected_objects>& get_expected_objects() {
 
     return data;
 }
+
+#pragma GCC diagnostic pop
 
 }
 

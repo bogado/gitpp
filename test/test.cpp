@@ -1,5 +1,3 @@
-#define TESTS_READY
-
 #include <bandit/bandit.h>
 
 #include <string>
@@ -14,13 +12,13 @@ namespace snowhouse {
 
 template <>
 struct Stringizer<std::string> {
-    static std::string ToString(const std::string& v) {
+    static std::string ToString(const std::string& string_value) {
         std::stringstream out;
         out << "[ " << std::hex;
-        for (unsigned char c : v) {
-            out << "0x" << unsigned(c) << " ";
+        for (auto c : string_value) {
+            out << "0x" << +c << " ";
         }
-        out << "] \"" << v << "\"";
+        out << "] \"" << string_value << "\"";
         return out.str();
     }
 };
@@ -38,8 +36,6 @@ struct Stringizer<char> {
 };
 
 }
-
-#define TESTS_READY
 
 void big_unsigned_test();
 void pack_index_test();

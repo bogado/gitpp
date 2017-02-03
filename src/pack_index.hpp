@@ -152,7 +152,6 @@ private:
     void init() {
         static constexpr char V2_HEADER[] = { -1, 116, 79, 99};
 
-        static std::vector<index_item> result;
         std::array<char, sizeof(uint32_t)> buffer;
 
         input.read(buffer.data(), buffer.size());
@@ -167,7 +166,6 @@ private:
 
     void load_summary() {
         static const size_t size = 4;
-        index_type acc;
         char buffer[size];
 
         input.seekg(SUMMARY_OFFSET, std::ios::beg);
@@ -209,7 +207,7 @@ private:
     }
 
     void load_offset_index() {
-        for(int i = 0; i < size(); i++) {
+        for(index_type i = 0; i < size(); i++) {
             offset_index.emplace(read_offset(i), i);
         }
     }

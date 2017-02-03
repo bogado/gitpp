@@ -180,7 +180,7 @@ public:
 private:
     template <typename T>
     static constexpr T update_result(T old_result, value_type value, unsigned used_bits) {
-        uintmax_t result = old_result;
+        auto result = old_result;
 
         if (big_endian) {
             result = result + (static_cast<T>(value) << used_bits);
@@ -294,10 +294,11 @@ private:
     }
 
     static void  unsigned_to_buffer(value_type val, buffer& result) {
-        static constexpr unsigned char byte_mask = 0xFF;
-        for (char& v: result) {
-            v = val & byte_mask;
-            val /= 256;
+        static constexpr value_type byte_mask = 0xFF;
+        for (auto& v: result) {
+            using v_type = typename std::remove_reference<decltype(v)>::type;
+            v = static_cast<v_type>(val & byte_mask);
+            val /= (1 << sizeof(v_type)*8);
         }
     }
 

@@ -108,7 +108,8 @@ void big_unsigned_test() {
             });
 
             it("convert back to value test", [&]() {
-                decltype(value) convert{expected.template convert<decltype(value)>()};
+                auto convert{expected.template convert<decltype(value)>()};
+                AssertThat(convert, Equals(value));
             });
 
             it("print test", [&]() {
@@ -180,7 +181,7 @@ void big_unsigned_test() {
         auto type_test = [&](auto value) {
             big_unsigned_with_type test{value};
 
-            for (int val  = 0; val < (1 << GIT_TYPE_ENCODE_BITS); val++) {
+            for (unsigned val  = 0; val < (1 << GIT_TYPE_ENCODE_BITS); val++) {
                 test.set_reserved_bits(val);
                 AssertThat(test.get_reserved_bits(), Equals(val));
                 AssertThat(test.template convert<decltype(value)>(), Equals(value));
@@ -189,25 +190,25 @@ void big_unsigned_test() {
 
         it("Back and forth conversion test", [&]() {
             for (unsigned i=0; i < 0x1000; i++) {
-                convert_all_directions(i * 7,             big_unsigned{});
-                convert_all_directions(i * 0x7000,        big_unsigned{});
-                convert_all_directions(i * 0x7000000,     big_unsigned{});
-                convert_all_directions(i * 0x56789abcdef, big_unsigned{});
-                convert_all_directions(i * 7,             big_unsigned_big_endian{});
-                convert_all_directions(i * 0x7000,        big_unsigned_big_endian{});
-                convert_all_directions(i * 0x7000000,     big_unsigned_big_endian{});
-                convert_all_directions(i * 0x7000000,     big_unsigned_big_endian{});
-                convert_all_directions(i * 0x56789abcdef, big_unsigned_big_endian{});
-                convert_all_directions(i * 7,             big_unsigned_with_type{});
-                convert_all_directions(i * 0x7000,        big_unsigned_with_type{});
-                convert_all_directions(i * 0x7000000,     big_unsigned_with_type{});
-                convert_all_directions(i * 0x7000000,     big_unsigned_with_type{});
-                convert_all_directions(i * 0x56789abcdef, big_unsigned_with_type{});
-                type_test(i * 7);
-                type_test(i * 0x7000);
-                type_test(i * 0x7000000);
-                type_test(i * 0x7000000);
-                type_test(i * 0x56789abcdef);
+                convert_all_directions(i * 7u,             big_unsigned{});
+                convert_all_directions(i * 0x7000u,        big_unsigned{});
+                convert_all_directions(i * 0x7000000u,     big_unsigned{});
+                convert_all_directions(i * 0x56789abcdefu, big_unsigned{});
+                convert_all_directions(i * 7u,             big_unsigned_big_endian{});
+                convert_all_directions(i * 0x7000u,        big_unsigned_big_endian{});
+                convert_all_directions(i * 0x7000000u,     big_unsigned_big_endian{});
+                convert_all_directions(i * 0x7000000u,     big_unsigned_big_endian{});
+                convert_all_directions(i * 0x56789abcdefu, big_unsigned_big_endian{});
+                convert_all_directions(i * 7u,             big_unsigned_with_type{});
+                convert_all_directions(i * 0x7000u,        big_unsigned_with_type{});
+                convert_all_directions(i * 0x7000000u,     big_unsigned_with_type{});
+                convert_all_directions(i * 0x7000000u,     big_unsigned_with_type{});
+                convert_all_directions(i * 0x56789abcdefu, big_unsigned_with_type{});
+                type_test(i * 7u);
+                type_test(i * 0x7000u);
+                type_test(i * 0x7000000u);
+                type_test(i * 0x7000000u);
+                type_test(i * 0x56789abcdefu);
             }
         });
     });
