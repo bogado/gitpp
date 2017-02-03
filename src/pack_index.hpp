@@ -237,7 +237,7 @@ public:
         return result;
     }
 
-    auto operator[](const value_type& item) {
+    auto operator[](const value_type& item) const {
         auto found = offset_index.find(item.get_pack_offset());
         if (found == offset_index.end()) {
             return value_type{};

@@ -146,7 +146,7 @@ private:
             if (type == DELTA_WITH_OFFSET) {
                 big_unsigned offset;
                 offset.binread(pack_input);
-                parent = item - offset.template convert<size_t>();
+                parent = index_parser[item - offset.template convert<size_t>()];
             } else {
                 std::string parent_name = read_name_from(pack_input);
                 parent = index_parser[parent_name];
