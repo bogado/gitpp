@@ -16,6 +16,9 @@ elseif ("${compiler_check_level}" STREQUAL "PEDANT")
 endif()
 
 add_compile_options("--std=c++1z")
+
+link_libraries("stdc++fs")
+
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
     add_compile_options("-Wno-global-constructors" "-Wno-missing-prototypes")
     add_compile_options("-Wno-c++98-compat")
@@ -29,6 +32,9 @@ add_executable(gitpp_test
     test/pack_index_test.cpp
     test/pack_loader_test.cpp
 )
+
+add_executable(pack_ls
+    samples/pack_ls.cpp)
 
 include_directories(TARGET gitpp_test)
 include_directories(TARGET gitpp_test SYSTEM vendor/bandit)
