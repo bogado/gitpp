@@ -4,12 +4,14 @@
 #include "buffer.hpp"
 #include "indexed_iterator.hpp"
 #include "iohelper.hpp"
+#include "filesystem.hpp"
 
 #include <vector>
 #include <sstream>
 #include <utility>
 #include <algorithm>
 #include <map>
+#include <iostream>
 
 namespace git {
 
@@ -288,11 +290,19 @@ public:
             dump_stream << val.get_name() << "\n";
         }
     }
+
 };
+
+template <typename PATH>
+static fs::path get_index_path(PATH file) {
+    fs::path file_path{file};
+    file_path.replace_extension(INDEX_FILE_EXTENSION);
+    return file_path;
+}
 
 template <class PATH>
 auto index_file_parser(PATH filename) {
-    return index_reader_base<std::ifstream>(filename, std::ios::binary);
+    return index_reader_base<std::ifstream>(get_index_path(filename), std::ios::binary);
 }
 
 }

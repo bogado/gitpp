@@ -67,7 +67,6 @@ public:
     }
 };
 
-
 template <class STREAM, typename INDEX_T = size_t>
 class pack_loader :
     public index_iterable<pack_loader<STREAM, INDEX_T>, INDEX_T>
@@ -211,11 +210,18 @@ public:
     }
 };
 
+template <typename PATH>
+fs::path get_pack_path(PATH file) {
+    fs::path file_path{file};
+    file_path.replace_extension(PACK_FILE_EXTENSION);
+    return file_path;
+}
+
 template <class PATH>
 auto pack_file_parser(const PATH& pack_base_path) {
     return pack_loader<std::ifstream>(
-            index_file_parser(pack_base_path + INDEX_FILE_EXTENSION),
-            pack_base_path + PACK_FILE_EXTENSION);
+            index_file_parser(pack_base_path),
+            get_pack_path(pack_base_path));
 }
 
 }
