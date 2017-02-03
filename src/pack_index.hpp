@@ -9,6 +9,7 @@
 #include <sstream>
 #include <utility>
 #include <algorithm>
+#include <map>
 
 namespace git {
 
@@ -17,15 +18,18 @@ constexpr auto GIT_OBJECT_NAME_SIZE = 20;
 
 class index_item {
     std::string name;
-    size_t pack_offset;
+    uint64_t pack_offset;
+    uint32_t crc;
 public:
 
-    index_item(
+    explicit index_item(
         const std::string& name_ = "",
-        size_t offset_ = 0
+        uint64_t offset_ = 0,
+        uint32_t crc_ = 0
     ) :
         name(name_),
-        pack_offset(offset_)
+        pack_offset(offset_),
+        crc(crc_)
     {}
 
     explicit index_item(size_t offset_) :
@@ -47,13 +51,23 @@ public:
         return pack_offset;
     }
 
+    auto get_crc() const {
+        return crc;
+    }
+
     operator bool() const {
         return pack_offset != 0;
     }
 
-    // TODO: different implementations of this index item for each type of offset.
-    template <typename STREAM>
-    void seek_stream(STREAM& input) const {
+    void seek_stream(std::ostream& input) const {
+        if (!*this) {
+            return;
+        }
+        input.clear();
+        input.seekp(pack_offset, std::ios_base::beg);
+    }
+
+    void seek_stream(std::istream& input) const {
         if (!*this) {
             return;
         }
@@ -63,7 +77,8 @@ public:
 };
 
 namespace {
-char hex_digit (unsigned v) {
+
+inline char hex_digit (unsigned v) {
     v &= 0x0f;
     if (v < 10) {
         return '0' + v;
@@ -72,17 +87,14 @@ char hex_digit (unsigned v) {
     }
 }
 
-uint8_t hex_value(char d) {
+inline uint8_t hex_value(char d) {
     if (d >= 'a' && d <= 'f') { return d - 'a' + 10; }
     if (d >= 'A' && d <= 'F') { return d - 'A' + 10; }
     if (d >= '0' && d <= '9') { return d - '0'; }
     return 0;
 }
 
-}
-
-template <class STREAM>
-std::string read_name_from(STREAM& input) {
+inline std::string read_name_from(std::istream& input) {
     char buffer[GIT_OBJECT_NAME_SIZE];
     input.read(buffer, GIT_OBJECT_NAME_SIZE);
 
@@ -96,6 +108,8 @@ std::string read_name_from(STREAM& input) {
     }
 
     return result;
+}
+
 }
 
 // TODO: no support for > 4gb packages
@@ -130,6 +144,7 @@ private:
     static const index_type OFFSET_SIZE = 4;
 
     std::array<index_type, 256> summary;
+    std::map<size_t, index_type> offset_index;
 
     index_type start_crcs = 0;
     index_type start_offsets = 0;
@@ -193,6 +208,12 @@ private:
         return read_netorder_at<uint32_t>(input, offset_location(index));
     }
 
+    void load_offset_index() {
+        for(int i = 0; i < size(); i++) {
+            offset_index.emplace(read_offset(i), i);
+        }
+    }
+
 public:
     template <typename... ARGS>
     index_reader_base(ARGS && ... args) :
@@ -203,6 +224,7 @@ public:
         load_summary();
         start_crcs = name_location(size());
         start_offsets = crc_location(size());
+        load_offset_index();
     }
 
     auto operator[](index_type index) const {
@@ -210,10 +232,19 @@ public:
         if (index < size()) {
             result = value_type {
                 read_name(index),
-                read_offset(index)
+                read_offset(index),
+                read_crc(index)
             };
         }
         return result;
+    }
+
+    auto operator[](const value_type& item) {
+        auto found = offset_index.find(item.get_pack_offset());
+        if (found == offset_index.end()) {
+            return value_type{};
+        }
+        return (*this)[found->second];
     }
 
     auto operator[](std::string name) const {
@@ -229,6 +260,17 @@ public:
             return index_item{};
         } else {
             return *found;
+        }
+    }
+
+    auto next(const value_type& item) const {
+        auto offset = item.get_pack_offset();
+        auto it = offset_index.find(offset);
+        if (it != offset_index.end()) {
+            std::advance(it, 1);
+            return (*this)[it->second];
+        } else {
+            return value_type{};
         }
     }
 

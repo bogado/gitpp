@@ -31,13 +31,14 @@ public:
     object_description(
         const std::string& name_,
         const std::string& type_,
-        size_t size_ = 0,
-        size_t pack_size_ = 0,
-        size_t pack_offset_ = 0,
-        size_t pack_depth_ = 0,
+        uint64_t size_ = 0,
+        uint64_t pack_offset_ = 0,
+        uint64_t pack_size_ = 0,
+        uint32_t crc_ = 0,
+        unsigned pack_depth_ = 0,
         index_item parent = index_item{}
     ) :
-        index_item(name_, pack_offset_),
+        index_item{name_, pack_offset_, crc_},
         type{type_},
         size{size_},
         pack_size{pack_size_},
@@ -71,6 +72,7 @@ template <class STREAM, typename INDEX_T = size_t>
 class pack_loader :
     public index_iterable<pack_loader<STREAM, INDEX_T>, INDEX_T>
 {
+    static constexpr auto TAIL_SIZE = 20; // 20 bytes SHA1 checksum at the end of the file.
     using ITERABLE = index_iterable<pack_loader<STREAM, INDEX_T>, INDEX_T>;
     using index_parser_type = index_reader_base<STREAM, INDEX_T>;
 
@@ -126,6 +128,7 @@ public:
 private:
     index_parser_type index_parser;
     mutable stream_t pack_input;
+    uint64_t pack_size;
 
     auto load_data(const index_item& item) const {
         item.seek_stream(pack_input);
@@ -155,6 +158,19 @@ private:
         return std::make_tuple(size, type, parent);
     }
 
+    uint64_t read_pack_size(index_item index) const {
+        if (!index) {
+            return 0;
+        }
+
+        auto next_object = index_parser.next(index);
+        if (next_object) {
+            return next_object.get_pack_offset() - index.get_pack_offset();
+        }
+
+        return pack_size - index.get_pack_offset() - TAIL_SIZE;
+    }
+
 public:
     template <typename... ARGS>
     pack_loader(index_parser_type&& index_parser_instance, ARGS&&... args) :
@@ -162,6 +178,8 @@ public:
         index_parser(std::move(index_parser_instance)),
         pack_input(std::forward<ARGS>(args)...)
     {
+        pack_input.seekg(0, std::ios::end);
+        pack_size = pack_input.tellg();
     }
 
     index_type size() const {
@@ -179,10 +197,11 @@ public:
 
         return value_type {
             index_found.get_name(),
-            get_type_name(type, parent), // TODO: read type.
+            get_type_name(type, parent),
             size,
-            0,  // TODO: read pack size.
             index_found.get_pack_offset(),
+            read_pack_size(index_found),
+            index_found.get_crc(),
             0, // TODO: depth.
             parent
         };
