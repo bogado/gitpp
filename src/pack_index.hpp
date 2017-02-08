@@ -45,7 +45,7 @@ public:
         return index_item{ pack_offset - diff };
     }
 
-    auto get_name() const {
+    const std::string& get_name() const {
         return name;
     }
 
@@ -78,6 +78,7 @@ public:
     }
 };
 
+// TODO: thoses are utilities free functions that might be defined elsewhere.
 namespace {
 
 inline char hex_digit (unsigned v) {
@@ -114,6 +115,12 @@ inline std::string read_name_from(std::istream& input) {
 
 }
 
+/** git pack index loader.
+ *
+ * This class reads a pack index and retrieves the positioning details for each object.
+ *
+ * Helper class to implement the pack object repository.
+ */
 // TODO: no support for > 4gb packages
 template <class STREAM, typename INDEX_T = size_t>
 class index_reader_base :

@@ -15,20 +15,23 @@
 
 #include "pack_index.hpp"
 #include "big_unsigned.hpp"
+#include "object_descriptor.hpp"
+
+#include <boost/iostreams/restrict.hpp>
 
 namespace git {
 
 constexpr auto PACK_FILE_EXTENSION = ".pack";
 
-class object_description : public index_item {
+/// Object description for packs.
+class pack_object_descriptor : public index_item, public virtual object_descriptor_base {
     const std::string& type;
     size_t size;
     size_t pack_size;
     size_t pack_depth;
     index_item delta_parent;
 public:
-
-    object_description(
+    pack_object_descriptor(
         const std::string& name_,
         const std::string& type_,
         uint64_t size_ = 0,
@@ -45,6 +48,10 @@ public:
         pack_depth{pack_depth_},
         delta_parent{parent}
     {}
+
+    const std::string& get_name() const {
+        return index_item::get_name();
+    }
 
     const std::string& get_type() const {
         return type;
@@ -72,6 +79,7 @@ class pack_loader :
     public index_iterable<pack_loader<STREAM, INDEX_T>, INDEX_T>
 {
     static constexpr auto TAIL_SIZE = 20; // 20 bytes SHA1 checksum at the end of the file.
+
     using ITERABLE = index_iterable<pack_loader<STREAM, INDEX_T>, INDEX_T>;
     using index_parser_type = index_reader_base<STREAM, INDEX_T>;
 
@@ -121,7 +129,7 @@ class pack_loader :
 public:
     using stream_t = STREAM;
     using index_type = INDEX_T;
-    using value_type = object_description;
+    using value_type = pack_object_descriptor;
     using reference  = typename ITERABLE::reference;
     using pointer    = typename ITERABLE::pointer;
 
