@@ -11,12 +11,14 @@ inline bool is_pack(path file) {
 
 void execute(path pack_file) {
     auto pack_loader = pack_file_parser(pack_file);
-    for (auto obj: pack_loader) {
+    for (const auto& obj: pack_loader) {
         cout << obj.get_name() << "(" << obj.get_type() << ") : @" <<
             obj.get_pack_offset() << " " << obj.get_size() << " bytes " <<
             obj.get_pack_size() << "bytes (packed)";
-        if (obj.get_pack_depth() > 0) {
-            cout << " has " << obj.get_pack_depth() << " level(s) parent: " << obj.get_delta_parent().get_name();
+
+        const auto* delta = dynamic_cast<const pack_delta_descriptor*>(&obj);
+        if (delta) {
+            cout << " has " << delta->get_pack_depth() << " level(s) parent: " << delta->get_delta_parent().get_name();
         }
         cout << "\n";
     }

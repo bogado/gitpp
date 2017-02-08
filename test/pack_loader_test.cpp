@@ -20,15 +20,15 @@ void pack_data_test() {
         test_collected("pack loader", pack_file_container, data::get_expected_objects(),
             [&](auto& obtained, auto& expected) {
                 AssertThat(obtained.get_name(), Equals(expected->name));
-                AssertThat(obtained.get_pack_offset(), Equals(expected->offset));
                 AssertThat(obtained.get_type(), Equals(expected->type));
                 AssertThat(obtained.get_size(), Equals(expected->size));
+                AssertThat(obtained.get_pack_offset(), Equals(expected->offset));
                 AssertThat(obtained.get_pack_size(), Equals(expected->pack_size));
-                AssertThat(obtained.get_pack_depth(), Equals(expected->depth));
-                if (obtained.get_delta_parent()) {
-                    AssertThat(obtained.get_delta_parent().get_name(), Equals(expected->parent));
-                } else {
-                    AssertThat("", Equals(expected->parent));
+                if (expected->depth > 0) {
+                    const auto& delta = dynamic_cast<const pack_delta_descriptor&>(obtained);
+
+                    AssertThat(delta.get_pack_depth(), Equals(expected->depth));
+                    AssertThat(delta.get_delta_parent().get_name(), Equals(expected->parent));
                 }
             }
         );

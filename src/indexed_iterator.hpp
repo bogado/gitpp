@@ -10,6 +10,8 @@ public:
     using value_type = typename SOURCE::value_type;
     using reference = value_type&;
     using pointer   = value_type*;
+    using const_reference = const value_type&;
+    using const_pointer   = const value_type*;
 
     using difference_type = decltype(index_type{} - index_type{});
     using iterator_category = std::random_access_iterator_tag;
@@ -72,11 +74,11 @@ public:
         return result;
     }
 
-    auto operator*() {
+    auto operator*() -> decltype((*source)[0]) {
         return (*source)[index];
     }
 
-    auto operator[](index_type i) {
+    auto operator[](index_type i) -> decltype((*source)[0]) {
         return (*source)[index + i];
     }
 

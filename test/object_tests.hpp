@@ -19,7 +19,7 @@ void test_collected(std::string description, COLLECTED& items, const EXPECTED& e
     });
 
     int i = 0;
-    for(auto item : items) {
+    for(const auto& item : items) {
         it_desc.str("");
         it_desc << description << ": item #" << i++;
 

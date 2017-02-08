@@ -10,6 +10,8 @@ class object_descriptor_base {
 public:
     virtual ~object_descriptor_base() = default;
     virtual const std::string& get_name() const = 0;
+    virtual operator bool() const = 0;
+    virtual operator std::istream& get_stream() = 0;
 };
 
 }

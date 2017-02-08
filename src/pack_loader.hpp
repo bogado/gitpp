@@ -10,6 +10,7 @@
 #include <string>
 #include <utility>
 #include <tuple>
+#include <unordered_map>
 
 #include "filesystem.hpp"
 
@@ -24,54 +25,47 @@ namespace git {
 constexpr auto PACK_FILE_EXTENSION = ".pack";
 
 /// Object description for packs.
-class pack_object_descriptor : public index_item, public virtual object_descriptor_base {
-    const std::string& type;
+class pack_object_descriptor : public index_item, public object_descriptor_base {
     size_t size;
     size_t pack_size;
-    size_t pack_depth;
-    index_item delta_parent;
 public:
     pack_object_descriptor(
-        const std::string& name_,
-        const std::string& type_,
+        const std::string& name,
         uint64_t size_ = 0,
-        uint64_t pack_offset_ = 0,
+        uint64_t pack_offset = 0,
         uint64_t pack_size_ = 0,
-        uint32_t crc_ = 0,
-        unsigned pack_depth_ = 0,
-        index_item parent = index_item{}
+        uint32_t crc = 0
     ) :
-        index_item{name_, pack_offset_, crc_},
-        type{type_},
+        index_item{name, pack_offset, crc},
         size{size_},
-        pack_size{pack_size_},
-        pack_depth{pack_depth_},
-        delta_parent{parent}
+        pack_size{pack_size_}
     {}
 
     const std::string& get_name() const {
         return index_item::get_name();
     }
 
-    const std::string& get_type() const {
-        return type;
+    virtual const std::string& get_type() const = 0;
+
+    operator bool() const {
+        return size > 0;
     }
 
     auto get_size() const {
         return size;
     }
 
-    auto get_pack_size() {
+    auto get_pack_size() const {
         return pack_size;
     }
+};
 
-    auto get_pack_depth() {
-        return pack_depth;
-    }
+class pack_delta_descriptor {
+public:
+    virtual ~pack_delta_descriptor() = default;
 
-    auto get_delta_parent() {
-        return delta_parent;
-    }
+    virtual unsigned get_pack_depth() const = 0;
+    virtual object_descriptor_base& get_delta_parent() const = 0;
 };
 
 template <class STREAM, typename INDEX_T = size_t>
@@ -112,20 +106,6 @@ class pack_loader :
         return TYPES[index];
     }
 
-    auto get_type_and_depth(git_internal_type type, const index_item& parent, unsigned depth = 0) const {
-        if (!is_delta(type)) {
-            return std::make_pair(type, depth);
-        }
-
-        size_t size;
-        git_internal_type parent_type;
-        index_item grand_parent;
-
-        std::tie(size, parent_type, grand_parent) = load_data(parent);
-
-        return get_type_and_depth(parent_type, grand_parent, depth + 1);
-    }
-
 public:
     using stream_t = STREAM;
     using index_type = INDEX_T;
@@ -135,35 +115,162 @@ public:
 
 private:
     index_parser_type index_parser;
-    mutable stream_t pack_input;
     uint64_t pack_size;
 
-    auto load_data(const index_item& item) const {
-        item.seek_stream(pack_input);
+    // Retrieve objects do no alter this.
+    mutable stream_t pack_input;
+    mutable std::unordered_map<std::string, std::unique_ptr<pack_object_descriptor>> object_cache;
 
-        big_unsigned_with_type result;
-        result.binread(pack_input);
+    class non_delta_object_descriptor : public pack_object_descriptor {
+        std::unique_ptr<std::istream> stream;
+        git_internal_type type;
 
-        uint8_t type_id = result.get_reserved_bits();
-        auto type = static_cast<git_internal_type>(type_id);
-        size_t size = result.template convert<size_t>();
+    public:
+        non_delta_object_descriptor(
+                const pack_loader<STREAM, INDEX_T>& source_,
+                const std::string& name,
+                git_internal_type type_,
+                uint64_t size = 0,
+                uint64_t pack_offset = 0,
+                uint64_t pack_size = 0,
+                uint32_t crc = 0) :
+            pack_object_descriptor {
+                name,
+                size,
+                pack_offset,
+                pack_size,
+                crc },
+            type{type_}
+        {}
 
-        index_item parent;
-        if (is_delta(type)) {
-            if (type == DELTA_WITH_OFFSET) {
-                big_unsigned offset;
-                offset.binread(pack_input);
-                parent = index_parser[item - offset.template convert<size_t>()];
-            } else {
-                std::string parent_name = read_name_from(pack_input);
-                parent = index_parser[parent_name];
-                if (!parent) {
-                    throw "broke!";
+        const std::string& get_type() const override {
+            return type_name(type);
+        }
+
+        std::istream& get_stream() override {
+            return *stream;
+        }
+
+        virtual bool has_parent() const {
+            return false;
+        }
+
+        git_internal_type get_internal_type() const {
+            return type;
+        }
+    };
+
+    class delta_object_descriptor : public non_delta_object_descriptor, public pack_delta_descriptor {
+        unsigned pack_depth = 0;
+        non_delta_object_descriptor& parent;
+        git_internal_type external_type;
+
+        auto external_type_and_depth(unsigned depth = 0) const {
+            if (!parent.has_parent()) {
+                return std::make_pair(parent.get_internal_type(), depth + 1);
+            }
+
+            return dynamic_cast<delta_object_descriptor&>(parent).external_type_and_depth(depth + 1);
+        }
+
+    protected:
+        bool has_parent() const override {
+            return true;
+        }
+
+    public:
+        delta_object_descriptor(
+                const pack_loader<STREAM, INDEX_T>& source,
+                object_descriptor_base& parent_,
+                const std::string& name,
+                git_internal_type type,
+                uint64_t size = 0,
+                uint64_t pack_offset = 0,
+                uint64_t pack_size = 0,
+                uint32_t crc = 0
+            ) :
+            non_delta_object_descriptor{
+                source,
+                name,
+                type,
+                size,
+                pack_offset,
+                pack_size,
+                crc },
+            parent { dynamic_cast<non_delta_object_descriptor&>(parent_) }
+        {
+            std::tie(external_type, pack_depth) = external_type_and_depth();
+        }
+
+        unsigned get_pack_depth() const override {
+            return pack_depth;
+        }
+
+        object_descriptor_base& get_delta_parent() const override {
+            return parent;
+        }
+
+        const std::string& get_type() const override {
+            return type_name(external_type);
+        }
+    };
+
+    pack_object_descriptor& load_data(const index_item& item) const {
+        auto it = object_cache.find(item.get_name());
+        if (it == object_cache.end()) {
+            item.seek_stream(pack_input);
+
+            big_unsigned_with_type result;
+            result.binread(pack_input);
+
+            uint8_t type_id = result.get_reserved_bits();
+            auto type = static_cast<git_internal_type>(type_id);
+            size_t size = result.template convert<size_t>();
+
+            if (is_delta(type)) {
+                object_descriptor_base* parent;
+                if (type == DELTA_WITH_OFFSET) {
+                    big_unsigned offset;
+                    offset.binread(pack_input);
+                    parent = &(*this)[item - offset.template convert<size_t>()];
+                } else {
+                    std::string parent_name = read_name_from(pack_input);
+                    parent = &(*this)[parent_name];
+                    if (!(parent && *parent)) {
+                        throw "broke!";
+                    }
                 }
+
+                it = object_cache.emplace(
+                        item.get_name(),
+                        std::make_unique<delta_object_descriptor>(
+                                *this,
+                                *parent,
+                                item.get_name(),
+                                type,
+                                size,
+                                item.get_pack_offset(),
+                                read_pack_size(item),
+                                item.get_crc()
+                        )
+                ).first;
+            } else {
+                it = object_cache.emplace(
+                        item.get_name(),
+                        std::make_unique<non_delta_object_descriptor>(
+                            *this,
+                            item.get_name(),
+                            type,
+                            size,
+                            item.get_pack_offset(),
+                            read_pack_size(item),
+                            item.get_crc()
+                        )
+                ).first;
             }
         }
 
-        return std::make_tuple(size, type, parent);
+        return *it->second;
     }
 
     uint64_t read_pack_size(index_item index) const {
@@ -195,27 +302,12 @@ public:
     }
 
     template <typename ITEM_ID>
-    auto operator[](ITEM_ID index) const {
+    auto& operator[](ITEM_ID index) const {
         auto index_found = index_parser[index];
-        size_t size;
-        unsigned depth;
-        git_internal_type type;
-        index_item parent;
 
-        std::tie(size, type, parent) = load_data(index_found);
-        std::tie(type, depth) = get_type_and_depth(type, parent);
-
-        return value_type {
-            index_found.get_name(),
-            type_name(type),
-            size,
-            index_found.get_pack_offset(),
-            read_pack_size(index_found),
-            index_found.get_crc(),
-            depth, // TODO: depth.
-            parent
-        };
+        return load_data(index_found);
     }
+
 };
 
 template <typename PATH>
