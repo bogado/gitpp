@@ -23,6 +23,10 @@ namespace snowhouse {
 }
 
 void big_unsigned_test() {
+    const static std::uint8_t num_10[] = {
+        0x0a, 0x01
+    };
+
     const static std::uint8_t num_32[] = {
         0x20
     };
@@ -99,7 +103,13 @@ void big_unsigned_test() {
             it("write to stream test", [&]() {
                 std::stringstream out;
                 expected.binwrite(out);
-                AssertThat(out.str(), EqualsContainer(source));
+                auto source_it = std::begin(source);
+
+                // only the beggining of the source is expected to be equal to out.
+                for (auto c : out.str()) {
+                    AssertThat(c, Equals(*source_it));
+                    ++source_it;
+                }
             });
 
             decltype(expected) converted{value};
@@ -128,11 +138,13 @@ void big_unsigned_test() {
             });
         };
 
+        runTests(num_10,      uint8_t (10),    "0xa",     big_unsigned_big_endian{10});
         runTests(num_32,      uint8_t (32),    "0x20",    big_unsigned_big_endian{32});
         runTests(num_255_BE,  uint8_t (255),   "0xff",    big_unsigned_big_endian{255});
         runTests(num_1025_BE, uint16_t(1025),  "0x401",   big_unsigned_big_endian{1025});
         runTests(num_65536_BE,uint32_t(65536), "0x10000", big_unsigned_big_endian{65536});
 
+        runTests(num_10,      uint64_t(10),    "0xa",     big_unsigned_big_endian{10});
         runTests(num_32,      uint64_t(32),    "0x20",    big_unsigned_big_endian{32});
         runTests(num_255_BE,  uint64_t(255),   "0xff",    big_unsigned_big_endian{255});
         runTests(num_1025_BE, uint64_t(1025),  "0x401",   big_unsigned_big_endian{1025});
@@ -143,11 +155,13 @@ void big_unsigned_test() {
                                      "0x123456789abcdef",
                  big_unsigned_big_endian{0x123456789abcdef});
 
+        runTests(num_10,   uint8_t(10),     "0xa",     big_unsigned{10});
         runTests(num_32,   uint8_t(32),     "0x20",    big_unsigned{32});
         runTests(num_255,  uint8_t(255),    "0xff",    big_unsigned{255});
         runTests(num_1025, uint16_t(1025),  "0x401",   big_unsigned{1025});
         runTests(num_65536,uint32_t(65536), "0x10000", big_unsigned{65536});
 
+        runTests(num_10,   uint64_t(10),    "0xa",     big_unsigned{10});
         runTests(num_32,   uint64_t(32),    "0x20",    big_unsigned{32});
         runTests(num_255,  uint64_t(255),   "0xff",    big_unsigned{255});
         runTests(num_1025, uint64_t(1025),  "0x401",   big_unsigned{1025});
@@ -158,11 +172,13 @@ void big_unsigned_test() {
                              "0x123456789abcdef",
                  big_unsigned{0x123456789abcdef});
 
+        runTests(num_10,      uint8_t(10),     "0xa",     big_unsigned_with_type{10});
         runTests(num_32_WT,   uint8_t(32),     "0x20",    big_unsigned_with_type{32});
         runTests(num_255_WT,  uint8_t(255),    "0xff",    big_unsigned_with_type{255});
         runTests(num_1025_WT, uint16_t(1025),  "0x401",   big_unsigned_with_type{1025});
         runTests(num_65536_WT,uint32_t(65536), "0x10000", big_unsigned_with_type{65536});
 
+        runTests(num_10,      uint64_t(10),    "0xa",     big_unsigned_with_type{10});
         runTests(num_32_WT,   uint64_t(32),    "0x20",    big_unsigned_with_type{32});
         runTests(num_255_WT,  uint64_t(255),   "0xff",    big_unsigned_with_type{255});
         runTests(num_1025_WT, uint64_t(1025),  "0x401",   big_unsigned_with_type{1025});
