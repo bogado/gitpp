@@ -19,6 +19,8 @@
 #include "object_descriptor.hpp"
 
 #include <boost/iostreams/restrict.hpp>
+#include <boost/iostreams/filtering_stream.hpp>
+#include <boost/iostreams/filter/zlib.hpp>
 
 namespace git {
 
@@ -26,17 +28,20 @@ constexpr auto PACK_FILE_EXTENSION = ".pack";
 
 /// Object description for packs.
 class pack_object_descriptor : public index_item, public object_descriptor_base {
+    unsigned header_size;
     size_t size;
     size_t pack_size;
 public:
     pack_object_descriptor(
         const std::string& name,
+        unsigned header_size_ = 0,
         uint64_t size_ = 0,
         uint64_t pack_offset = 0,
         uint64_t pack_size_ = 0,
         uint32_t crc = 0
     ) :
         index_item{name, pack_offset, crc},
+        header_size{header_size_},
         size{size_},
         pack_size{pack_size_}
     {}
@@ -57,6 +62,14 @@ public:
 
     auto get_pack_size() const {
         return pack_size;
+    }
+
+    auto get_data_offset() const {
+        return get_pack_offset() + header_size;
+    }
+
+    auto get_data_size() const {
+        return static_cast<uint64_t>(get_pack_size() - header_size + 1);
     }
 };
 
@@ -92,7 +105,7 @@ class pack_loader :
 
     static const std::string& type_name(git_internal_type type) {
         static const std::string TYPES[] = {
-            "invalid",
+            "invalid(0)",
             "commit",
             "tree",
             "blob",
@@ -130,24 +143,29 @@ private:
                 const pack_loader<STREAM, INDEX_T>& source_,
                 const std::string& name,
                 git_internal_type type_,
+                unsigned header_size = 0,
                 uint64_t size = 0,
                 uint64_t pack_offset = 0,
                 uint64_t pack_size = 0,
                 uint32_t crc = 0) :
             pack_object_descriptor {
                 name,
+                header_size,
                 size,
                 pack_offset,
                 pack_size,
                 crc },
             type{type_}
-        {}
+        {
+            stream = source_.restricted_stream(*this);
+        }
 
         const std::string& get_type() const override {
             return type_name(type);
         }
 
         std::istream& get_stream() override {
+            stream->clear();
             return *stream;
         }
 
@@ -184,6 +202,7 @@ private:
                 object_descriptor_base& parent_,
                 const std::string& name,
                 git_internal_type type,
+                unsigned header_size,
                 uint64_t size = 0,
                 uint64_t pack_offset = 0,
                 uint64_t pack_size = 0,
@@ -193,11 +212,12 @@ private:
                 source,
                 name,
                 type,
+                header_size,
                 size,
                 pack_offset,
                 pack_size,
-                crc },
-            parent { dynamic_cast<non_delta_object_descriptor&>(parent_) }
+                crc
+            }, parent { dynamic_cast<non_delta_object_descriptor&>(parent_) }
         {
             std::tie(external_type, pack_depth) = external_type_and_depth();
         }
@@ -248,6 +268,7 @@ private:
                                 *parent,
                                 item.get_name(),
                                 type,
+                                0,
                                 size,
                                 item.get_pack_offset(),
                                 read_pack_size(item),
@@ -261,6 +282,7 @@ private:
                             *this,
                             item.get_name(),
                             type,
+                            result.size(),
                             size,
                             item.get_pack_offset(),
                             read_pack_size(item),
@@ -286,6 +308,26 @@ private:
         return pack_size - index.get_pack_offset() - TAIL_SIZE;
     }
 
+    auto restricted_stream(non_delta_object_descriptor& object) const {
+        boost::iostreams::zlib_decompressor decompress_filter{};
+
+        pack_input.seekg(0, std::ios::beg);
+        pack_input.unsetf(std::ios::skipws);
+
+        auto restricted_source = boost::iostreams::restrict(pack_input,
+            object.get_data_offset(),
+            object.get_data_size()
+        );
+
+        auto result = std::make_unique<boost::iostreams::filtering_istream>();
+
+        result->push(decompress_filter);
+        result->push(restricted_source);
+        result->unsetf(std::ios::skipws);
+
+        return result;
+    }
+
 public:
     template <typename... ARGS>
     pack_loader(index_parser_type&& index_parser_instance, ARGS&&... args) :
@@ -293,6 +335,7 @@ public:
         index_parser(std::move(index_parser_instance)),
         pack_input(std::forward<ARGS>(args)...)
     {
+        pack_input.unsetf(std::ios_base::skipws);
         pack_input.seekg(0, std::ios::end);
         pack_size = pack_input.tellg();
     }
@@ -307,7 +350,6 @@ public:
 
         return load_data(index_found);
     }
-
 };
 
 template <typename PATH>
@@ -321,7 +363,7 @@ template <class PATH>
 auto pack_file_parser(const PATH& pack_base_path) {
     return pack_loader<std::ifstream>(
             index_file_parser(pack_base_path),
-            get_pack_path(pack_base_path));
+            get_pack_path(pack_base_path), std::ios::binary);
 }
 
 }
