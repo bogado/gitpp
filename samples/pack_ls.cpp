@@ -1,17 +1,14 @@
 #include "pack_loader.hpp"
 #include "filesystem.hpp"
 
-#include <iterator>
+#include "find_pack.hpp"
+
 #include <iostream>
 #include <iomanip>
 
 using namespace std;
 using namespace git;
 using namespace git::fs;
-
-inline bool is_pack(path file) {
-    return file.extension() == ".pack" || file.extension() == ".idx";
-}
 
 template <typename T>
 void ls_pack(T& pack_loader) {
@@ -31,42 +28,20 @@ void ls_pack(T& pack_loader) {
     }
 }
 
-template <typename T>
-void cat_object(T& pack_loader, const std::string& name) {
-    auto& object = pack_loader[name];
-    auto begin = std::istream_iterator<char>(object.get_stream());
-    auto end   = std::istream_iterator<char>();
-    std::copy(begin, end, std::ostream_iterator<char>(std::cout, ""));
-}
-
 int main(int argc, const char* argv[]) {
     path pack;
-    if (argc <= 1) {
+    if (argc == 1) {
         pack = current_path();
     } else {
         pack = argv[1];
     }
 
-    while (! is_pack(pack)) {
-        auto directory = directory_iterator(pack);
-        auto found = find_if(begin(directory), end(directory), [&](const auto& file) -> bool {
-            return is_pack(file);
-        });
-        if (found == end(directory)) {
-            std::cout << pack.string() << " : could not find git pack\n";
-            return -1;
-        }
-        pack = *found;
+    if (!find_pack(pack)) {
+        return -1;
     }
 
     auto pack_loader = pack_file_parser(pack);
 
-    if (argc == 3) {
-        cat_object(pack_loader, argv[2]);
-    } else {
-        std::cout << "list of objects in " << pack << "\n";
-
-        ls_pack(pack_loader);
-    }
+    ls_pack(pack_loader);
 }
 

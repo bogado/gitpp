@@ -46,6 +46,11 @@ add_executable(gitpp_test
 add_executable(pack_ls
     samples/pack_ls.cpp)
 
+
+add_executable(pack_cat_obj
+    samples/pack_cat_obj.cpp)
+
+
 include_directories(TARGET gitpp_test)
 include_directories(TARGET gitpp_test SYSTEM vendor/bandit)
 set_property(TARGET gitpp_test PROPERTY CXX_STANDARD_REQUIRED ON)
