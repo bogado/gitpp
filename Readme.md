@@ -15,26 +15,27 @@ My objectives are pretty simple :
 
 ## What's here
 
-* parsing pack files.
-* parsing indexes files.
+* Parsing pack files.
+* Parsing indexes files.
 * Find objects by name on pack.
 * Find objects by offset.
 * Discover types for delta objects.
 * Discover depth for delta objects.
-* read objects from packages.
+* Read objects from packages. (non-delta objects only)
 
 ## What need to be done
 
 These are not in any particular order.
 
-* interpret different object types (blob, tree, commit and tag).
-* locate blob objects by commit/tree + path.
-* receive packages (be able to accept git push protocol).
+* Parse and stitch together patch objects.
+* Interpret different object types (blob, tree, commit and tag).
+* Locate blob objects by commit/tree + path.
+* Receive packages (be able to accept git push protocol).
     After this point gitpp can be used in a server/service environment.
-* git objects that are not on packs.
+* Git objects that are not on packs.
     After this point gitpp can be used on a client environment.
-* create objects.
-* pack objects.
+* Create objects.
+* Pack objects.
 
 ## Samples
 
@@ -44,4 +45,4 @@ The library comes with a few samples code that you can try for yourself. They ar
     Lists infromation about all the objects inside a package. Shows the same information that ``git verify-pack -v`` will with a little bit more verbosity. Also addresses in the packages are printed in hex to help locating them with hex-editors.
 
 * ``pack_cat_obj``
-    This will dump an object into the output. It could be used to extract blobs from the the package or to simply check them out.
+    This will dump an object into the output. It could be used to extract blobs from the the package or to simply check them out. For the time being this will only work for non-delta objects.
