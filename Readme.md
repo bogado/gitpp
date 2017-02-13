@@ -36,3 +36,12 @@ These are not in any particular order.
 * create objects.
 * pack objects.
 
+## Samples
+
+The library comes with a few samples code that you can try for yourself. They are small utilities that will execute some read-only operation on your git repo.
+
+* ``pack_ls``
+    Lists infromation about all the objects inside a package. Shows the same information that ``git verify-pack -v`` will with a little bit more verbosity. Also addresses in the packages are printed in hex to help locating them with hex-editors.
+
+* ``pack_cat_obj``
+    This will dump an object into the output. It could be used to extract blobs from the the package or to simply check them out.
