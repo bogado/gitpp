@@ -1,0 +1,10 @@
+--- I/O layer -----------
+
+<repository> -> <descriptor> -+
+                              |
+--- logical layer -------  <stream>
+                              |
+    < commit >--\             |
+      < tag >----> <Object> <-+
+      < dir >---/
+    < blob >---/
