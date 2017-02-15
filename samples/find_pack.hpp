@@ -3,7 +3,7 @@
 
 #include <algorithm>
 
-#include "filesystem.hpp"
+#include "util/filesystem.hpp"
 
 inline bool is_pack(git::fs::path file) {
     return file.extension() == ".pack" || file.extension() == ".idx";

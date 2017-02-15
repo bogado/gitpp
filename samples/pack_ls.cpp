@@ -1,5 +1,5 @@
-#include "pack_loader.hpp"
-#include "filesystem.hpp"
+#include "pack/loader.hpp"
+#include "util/filesystem.hpp"
 
 #include "find_pack.hpp"
 

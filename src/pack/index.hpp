@@ -1,10 +1,10 @@
 #ifndef PACK_INDEX_HPP_INCLUDED
 #define PACK_INDEX_HPP_INCLUDED
 
-#include "buffer.hpp"
-#include "indexed_iterator.hpp"
-#include "iohelper.hpp"
-#include "filesystem.hpp"
+#include "util/buffer.hpp"
+#include "util/indexed_iterator.hpp"
+#include "util/filesystem.hpp"
+#include "streams/iohelper.hpp"
 
 #include <vector>
 #include <sstream>

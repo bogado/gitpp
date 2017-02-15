@@ -12,10 +12,10 @@
 #include <tuple>
 #include <unordered_map>
 
-#include "filesystem.hpp"
+#include "util/filesystem.hpp"
 
-#include "pack_index.hpp"
-#include "big_unsigned.hpp"
+#include "pack/index.hpp"
+#include "util/big_unsigned.hpp"
 #include "object_descriptor.hpp"
 
 #include <boost/iostreams/restrict.hpp>
