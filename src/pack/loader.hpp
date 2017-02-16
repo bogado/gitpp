@@ -16,11 +16,11 @@
 
 #include "pack/index.hpp"
 #include "util/big_unsigned.hpp"
+#include "streams/sources.hpp"
+#include "streams/iohelper.hpp"
+#include "streams/uncompress_stream.hpp"
 #include "object_descriptor.hpp"
 
-#include <boost/iostreams/restrict.hpp>
-#include <boost/iostreams/filtering_stream.hpp>
-#include <boost/iostreams/filter/zlib.hpp>
 
 namespace git {
 
@@ -81,14 +81,14 @@ public:
     virtual object_descriptor_base& get_delta_parent() const = 0;
 };
 
-template <class STREAM, typename INDEX_T = size_t>
+template <class SOURCE, typename INDEX_T = size_t>
 class pack_loader :
-    public index_iterable<pack_loader<STREAM, INDEX_T>, INDEX_T>
+    public index_iterable<pack_loader<SOURCE, INDEX_T>, INDEX_T>
 {
     static constexpr auto TAIL_SIZE = 20; // 20 bytes SHA1 checksum at the end of the file.
 
-    using ITERABLE = index_iterable<pack_loader<STREAM, INDEX_T>, INDEX_T>;
-    using index_parser_type = index_reader_base<STREAM, INDEX_T>;
+    using ITERABLE = index_iterable<pack_loader<SOURCE, INDEX_T>, INDEX_T>;
+    using index_parser_type = index_reader_base<SOURCE, INDEX_T>;
 
     enum git_internal_type {
         COMMIT = 1,
@@ -120,7 +120,7 @@ class pack_loader :
     }
 
 public:
-    using stream_t = STREAM;
+    using source_t = SOURCE;
     using index_type = INDEX_T;
     using value_type = pack_object_descriptor;
     using reference  = typename ITERABLE::reference;
@@ -128,10 +128,9 @@ public:
 
 private:
     index_parser_type index_parser;
-    uint64_t pack_size;
 
     // Retrieve objects do no alter this.
-    mutable stream_t pack_input;
+    mutable source_t pack_source;
     mutable std::unordered_map<std::string, std::unique_ptr<pack_object_descriptor>> object_cache;
 
     class non_delta_object_descriptor : public pack_object_descriptor {
@@ -139,8 +138,9 @@ private:
         git_internal_type type;
 
     public:
+        template <class PACK_SOURCE>
         non_delta_object_descriptor(
-                const pack_loader<STREAM, INDEX_T>& source_,
+                const PACK_SOURCE& source_,
                 const std::string& name,
                 git_internal_type type_,
                 unsigned header_size = 0,
@@ -157,7 +157,8 @@ private:
                 crc },
             type{type_}
         {
-            stream = source_.restricted_stream(*this);
+            auto restricted_source = source_.subsource(get_data_offset(), get_data_size());
+            stream = make_uncompressed_source(size, restricted_source).stream();
         }
 
         const std::string& get_type() const override {
@@ -197,8 +198,9 @@ private:
         }
 
     public:
+        template <class PACK_SOURCE>
         delta_object_descriptor(
-                const pack_loader<STREAM, INDEX_T>& source,
+                const PACK_SOURCE& source,
                 object_descriptor_base& parent_,
                 const std::string& name,
                 git_internal_type type,
@@ -238,10 +240,10 @@ private:
     pack_object_descriptor& load_data(const index_item& item) const {
         auto it = object_cache.find(item.get_name());
         if (it == object_cache.end()) {
-            item.seek_stream(pack_input);
+            auto pack_input = pack_source.subsource(item.get_pack_offset()).stream();
 
             big_unsigned_with_type result;
-            result.binread(pack_input);
+            result.binread(*pack_input);
 
             uint8_t type_id = result.get_reserved_bits();
             auto type = static_cast<git_internal_type>(type_id);
@@ -251,10 +253,10 @@ private:
                 object_descriptor_base* parent;
                 if (type == DELTA_WITH_OFFSET) {
                     big_unsigned offset;
-                    offset.binread(pack_input);
+                    offset.binread(*pack_input);
                     parent = &(*this)[item - offset.template convert<size_t>()];
                 } else {
-                    std::string parent_name = read_name_from(pack_input);
+                    std::string parent_name = read_object_name_from(*pack_input);
                     parent = &(*this)[parent_name];
                     if (!(parent && *parent)) {
                         throw "broke!";
@@ -264,7 +266,7 @@ private:
                 it = object_cache.emplace(
                         item.get_name(),
                         std::make_unique<delta_object_descriptor>(
-                                *this,
+                                pack_source,
                                 *parent,
                                 item.get_name(),
                                 type,
@@ -279,7 +281,7 @@ private:
                 it = object_cache.emplace(
                         item.get_name(),
                         std::make_unique<non_delta_object_descriptor>(
-                            *this,
+                            pack_source,
                             item.get_name(),
                             type,
                             result.size(),
@@ -305,27 +307,7 @@ private:
             return next_object.get_pack_offset() - index.get_pack_offset();
         }
 
-        return pack_size - index.get_pack_offset() - TAIL_SIZE;
-    }
-
-    auto restricted_stream(non_delta_object_descriptor& object) const {
-        boost::iostreams::zlib_decompressor decompress_filter{};
-
-        pack_input.seekg(0, std::ios::beg);
-        pack_input.unsetf(std::ios::skipws);
-
-        auto restricted_source = boost::iostreams::restrict(pack_input,
-            object.get_data_offset(),
-            object.get_data_size()
-        );
-
-        auto result = std::make_unique<boost::iostreams::filtering_istream>();
-
-        result->push(decompress_filter);
-        result->push(restricted_source);
-        result->unsetf(std::ios::skipws);
-
-        return result;
+        return pack_source.size() - index.get_pack_offset() - TAIL_SIZE;
     }
 
 public:
@@ -333,12 +315,8 @@ public:
     pack_loader(index_parser_type&& index_parser_instance, ARGS&&... args) :
         ITERABLE(*this),
         index_parser(std::move(index_parser_instance)),
-        pack_input(std::forward<ARGS>(args)...)
-    {
-        pack_input.unsetf(std::ios_base::skipws);
-        pack_input.seekg(0, std::ios::end);
-        pack_size = pack_input.tellg();
-    }
+        pack_source(std::forward<ARGS>(args)...)
+    {}
 
     index_type size() const {
         return index_parser.size();
@@ -361,9 +339,9 @@ fs::path get_pack_path(PATH file) {
 
 template <class PATH>
 auto pack_file_parser(const PATH& pack_base_path) {
-    return pack_loader<std::ifstream>(
+    return pack_loader<file_source>(
             index_file_parser(pack_base_path),
-            get_pack_path(pack_base_path), std::ios::binary);
+            get_pack_path(pack_base_path));
 }
 
 }

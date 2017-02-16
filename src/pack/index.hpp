@@ -4,7 +4,9 @@
 #include "util/buffer.hpp"
 #include "util/indexed_iterator.hpp"
 #include "util/filesystem.hpp"
+#include "util/git_definitions.hpp"
 #include "streams/iohelper.hpp"
+#include "streams/sources.hpp"
 
 #include <vector>
 #include <sstream>
@@ -16,7 +18,6 @@
 namespace git {
 
 constexpr auto INDEX_FILE_EXTENSION = ".idx";
-constexpr auto GIT_OBJECT_NAME_SIZE = 20;
 
 class index_item {
     std::string name;
@@ -60,60 +61,8 @@ public:
     operator bool() const {
         return pack_offset != 0;
     }
-
-    void seek_stream(std::ostream& input) const {
-        if (!*this) {
-            return;
-        }
-        input.clear();
-        input.seekp(pack_offset, std::ios_base::beg);
-    }
-
-    void seek_stream(std::istream& input) const {
-        if (!*this) {
-            return;
-        }
-        input.clear();
-        input.seekg(pack_offset, std::ios_base::beg);
-    }
 };
 
-// TODO: thoses are utilities free functions that might be defined elsewhere.
-namespace {
-
-inline char hex_digit (unsigned v) {
-    v &= 0x0f;
-    if (v < 10) {
-        return '0' + v;
-    } else {
-        return 'a' + (v - 10);
-    }
-}
-
-inline uint8_t hex_value(char d) {
-    if (d >= 'a' && d <= 'f') { return d - 'a' + 10; }
-    if (d >= 'A' && d <= 'F') { return d - 'A' + 10; }
-    if (d >= '0' && d <= '9') { return d - '0'; }
-    return 0;
-}
-
-inline std::string read_name_from(std::istream& input) {
-    char buffer[GIT_OBJECT_NAME_SIZE];
-    input.read(buffer, GIT_OBJECT_NAME_SIZE);
-
-    std::string result(GIT_OBJECT_NAME_SIZE * 2, ' ');
-    auto it = result.begin();
-    for (char v: buffer) {
-        *it = hex_digit(v >> 4);
-        it++;
-        *it = hex_digit(v & 0x0f);
-        it++;
-    }
-
-    return result;
-}
-
-}
 
 /** git pack index loader.
  *
@@ -122,11 +71,11 @@ inline std::string read_name_from(std::istream& input) {
  * Helper class to implement the pack object repository.
  */
 // TODO: no support for > 4gb packages
-template <class STREAM, typename INDEX_T = size_t>
+template <class SOURCE, typename INDEX_T = size_t>
 class index_reader_base :
-    public index_iterable<index_reader_base<STREAM, INDEX_T>, INDEX_T>
+    public index_iterable<index_reader_base<SOURCE, INDEX_T>, INDEX_T>
 {
-    using ITERABLE = index_iterable<index_reader_base<STREAM, INDEX_T>, INDEX_T>;
+    using ITERABLE = index_iterable<index_reader_base<SOURCE, INDEX_T>, INDEX_T>;
 
 public:
     using index_type = INDEX_T;
@@ -138,16 +87,16 @@ public:
     using ITERABLE::end;
 
 private:
-    using stream_t = STREAM;
+    using source_t = SOURCE;
 
-    mutable stream_t input;
+    mutable source_t index_source;
 
     static const index_type SUMMARY_OFFSET = 8;
     static const index_type SUMMARY_ENTRY_SIZE = 4;
     static const index_type SUMMARY_SIZE = 256 * SUMMARY_ENTRY_SIZE;
 
     static const index_type NAMES_OFFSET = SUMMARY_OFFSET + SUMMARY_SIZE;
-    static const index_type NAME_SIZE = GIT_OBJECT_NAME_SIZE;
+    static const index_type NAME_SIZE = OBJECT_NAME_SIZE;
 
     static const index_type CRC_SIZE = 4;
     static const index_type OFFSET_SIZE = 4;
@@ -163,7 +112,9 @@ private:
 
         std::array<char, sizeof(uint32_t)> buffer;
 
-        input.read(buffer.data(), buffer.size());
+        auto input = index_source.stream();
+
+        input->read(buffer.data(), buffer.size());
         if (!std::equal(buffer.begin(), buffer.end(), V2_HEADER)) {
             std::stringstream err;
             err << "V1 index is not supported (yet) [ ";
@@ -177,10 +128,10 @@ private:
         static const size_t size = 4;
         char buffer[size];
 
-        input.seekg(SUMMARY_OFFSET, std::ios::beg);
+        auto input = index_source.substream(SUMMARY_OFFSET);
 
         for (auto& entry: summary) {
-            input.read(buffer, size);
+            input->read(buffer, size);
             entry = 0;
             for (auto& byte: buffer) {
                 entry <<= 8;
@@ -194,9 +145,7 @@ private:
     }
 
     std::string read_name(index_type index) const {
-        input.clear();
-        input.seekg(name_location(index), std::ios::beg);
-        return read_name_from(input);
+        return read_object_name_from(*index_source.substream(name_location(index)));
     }
 
     auto crc_location(unsigned index) const {
@@ -204,7 +153,7 @@ private:
     }
 
     auto read_crc(unsigned index) const {
-        return read_netorder_at<uint32_t>(input, crc_location(index));
+        return read_netorder_at<uint32_t>(index_source, crc_location(index));
     }
 
     auto offset_location(unsigned index) const {
@@ -212,7 +161,7 @@ private:
     }
 
     auto read_offset(unsigned index) const {
-        return read_netorder_at<uint32_t>(input, offset_location(index));
+        return read_netorder_at<uint32_t>(index_source, offset_location(index));
     }
 
     void load_offset_index() {
@@ -225,7 +174,7 @@ public:
     template <typename... ARGS>
     index_reader_base(ARGS && ... args) :
         ITERABLE(*this),
-        input(std::forward<ARGS>(args)...)
+        index_source(std::forward<ARGS>(args)...)
     {
         init();
         load_summary();
@@ -309,7 +258,7 @@ static fs::path get_index_path(PATH file) {
 
 template <class PATH>
 auto index_file_parser(PATH filename) {
-    return index_reader_base<std::ifstream>(get_index_path(filename), std::ios::binary);
+    return index_reader_base<file_source>(get_index_path(filename).string());
 }
 
 }
