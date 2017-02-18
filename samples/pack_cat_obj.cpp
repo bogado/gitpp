@@ -13,7 +13,9 @@ using namespace git::fs;
 template <typename T>
 void cat_object(T& pack_loader, const std::string& name) {
     auto& object = pack_loader[name];
-    auto begin = istream_iterator<char>(object.get_stream());
+    auto& stream = object.get_stream();
+    stream.unsetf(ios_base::skipws);
+    auto begin = istream_iterator<char>(stream);
     auto end   = istream_iterator<char>();
     copy(begin, end, ostream_iterator<char>(std::cout, ""));
 }
