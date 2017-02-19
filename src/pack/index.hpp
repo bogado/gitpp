@@ -204,18 +204,42 @@ public:
     }
 
     auto operator[](std::string name) const {
-        uint8_t first = hex_value(name[0]) * 16 + hex_value(name[1]);
+        if (name == "") return value_type{};
 
-        auto start = begin() + (first > 0 ? summary[first-1] : 0);
-        auto finish = start + (summary[first] - summary[first-1]);
+        int first, second;
 
-        auto found = std::lower_bound(start, finish, value_type{name, 0}, [](const auto &a, const auto& b) {
-            return a.get_name() < b.get_name();
-        });
-        if (found == end() || (*found).get_name() != name) {
-            return index_item{};
+        if (name.size() >= 2) {
+            second = hex_value(name[0]) * 16 + hex_value(name[1]);
+            first = second - 1;
         } else {
-            return *found;
+            first = hex_value(name[0]) * 16 ;
+            second = first + 15;
+        }
+
+        auto start = first > 0 ? summary[first] : 0;
+        auto finish = start + summary[second] - start;
+
+        auto value = value_type{name, 0};
+        auto range = std::equal_range(
+                begin() + start,
+                begin() + finish,
+                value,
+                [](const auto &a, const auto& b) {
+                    auto& name_a = a.get_name();
+                    auto& name_b = b.get_name();
+
+                    auto size = std::min(name_a.size(), name_b.size());
+                    if (size == 0) return false;
+                    return lexicographical_compare(
+                            std::begin(name_a), std::begin(name_a) + size,
+                            std::begin(name_b), std::begin(name_b) + size);
+                }
+        );
+
+         if (range.first != end() && std::distance(range.first, range.second) == 1) {
+            return *range.first;
+        } else {
+            return index_item{};
         }
     }
 
