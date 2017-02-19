@@ -21,13 +21,16 @@ My objectives are pretty simple :
 * Find objects by offset.
 * Discover types for delta objects.
 * Discover depth for delta objects.
-* Read objects from packages. (non-delta objects only)
+* Read objects from packages.
+* Read raw delta objects from the packages. (see parse deltas bellow)
 
 ## What need to be done
 
 These are not in any particular order.
 
-* Parse and stitch together patch objects.
+* Parse deltas.
+    Deltas behave somewhat like and actual object, I believe that I need to refactor the delta object to have a method that returns the descriptor of the underlying deltified object.
+* Stitch deltas together patch objects.
 * Interpret different object types (blob, tree, commit and tag).
 * Locate blob objects by commit/tree + path.
 * Receive packages (be able to accept git push protocol).
