@@ -11,12 +11,21 @@ using namespace git;
 using namespace git::fs;
 
 template <typename T>
-void cat_object(T& pack_loader, const std::string& name) {
+void cat_object(T& pack_loader, const std::string& name, std::string path) {
     auto& object = pack_loader[name];
+
+    if (!object) {
+        std::cout << "Could not find object '" << name << "' at " << path << "\n";
+        return;
+    }
     auto& stream = object.get_stream();
     stream.unsetf(ios_base::skipws);
     auto begin = istream_iterator<char>(stream);
     auto end   = istream_iterator<char>();
+    if (begin == end) {
+        std::cout << "Empty object found.\n";
+        return;
+    }
     copy(begin, end, ostream_iterator<char>(std::cout, ""));
 }
 
@@ -41,6 +50,6 @@ int main(int argc, const char* argv[]) {
 
     auto pack_loader = pack_file_parser(pack);
 
-    cat_object(pack_loader, argv[2]);
+    cat_object(pack_loader, argv[2], pack.string());
 }
 
