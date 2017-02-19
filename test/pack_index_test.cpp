@@ -19,16 +19,22 @@ void pack_index_test() {
 
     describe("loading package files indexes test", [&]() {
         auto index_file_container = index_file_parser(INDEX_FILE);
-        auto expected = data::get_expected_objects();
+        auto expected_items = data::get_expected_objects();
 
-        auto verify_object = [&](const auto& obtained, const auto& expected) {
+        auto verify_object = [&](const auto& obtained, const auto expected) {
             AssertThat(obtained.get_name(), Equals(expected->name));
             AssertThat(obtained.get_pack_offset(), Equals(expected->offset));
         };
 
-        for (auto expected_object: expected) {
+        static constexpr auto SUB_LEN = 6;
+
+        for (auto expected_object: expected_items) {
             it(("index by name " + expected_object.name).c_str(), [&]() {
                 verify_object(index_file_container[expected_object.name], &expected_object);
+            });
+            auto short_name = expected_object.name.substr(0, SUB_LEN);
+            it(("index by short name " + short_name).c_str(), [&]() {
+                verify_object(index_file_container[short_name], &expected_object);
             });
         }
 
