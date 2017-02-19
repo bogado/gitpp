@@ -31,6 +31,12 @@ class pack_object_descriptor : public index_item, public object_descriptor_base 
     unsigned header_size;
     size_t size;
     size_t pack_size;
+
+protected:
+    virtual unsigned get_header_size() const {
+        return header_size;
+    }
+
 public:
     pack_object_descriptor(
         const std::string& name,
@@ -65,11 +71,11 @@ public:
     }
 
     auto get_data_offset() const {
-        return get_pack_offset() + header_size;
+        return get_pack_offset() + get_header_size();
     }
 
     auto get_data_size() const {
-        return static_cast<uint64_t>(get_pack_size() - header_size + 1);
+        return static_cast<uint64_t>(get_pack_size() - get_header_size() + 1);
     }
 };
 
@@ -129,18 +135,20 @@ public:
 private:
     index_parser_type index_parser;
 
+    using cache_t = std::unordered_map<std::string, std::unique_ptr<pack_object_descriptor>>;
+    using cache_entry_t = cache_t::value_type;
     // Retrieve objects do no alter this.
     mutable source_t pack_source;
-    mutable std::unordered_map<std::string, std::unique_ptr<pack_object_descriptor>> object_cache;
+    mutable cache_t object_cache;
 
     class non_delta_object_descriptor : public pack_object_descriptor {
-        std::unique_ptr<std::istream> stream;
         git_internal_type type;
+        const source_t& source;
+        std::unique_ptr<std::istream> stream;
 
     public:
-        template <class PACK_SOURCE>
         non_delta_object_descriptor(
-                const PACK_SOURCE& source_,
+                const source_t& source_,
                 const std::string& name,
                 git_internal_type type_,
                 unsigned header_size = 0,
@@ -155,18 +163,20 @@ private:
                 pack_offset,
                 pack_size,
                 crc },
-            type{type_}
-        {
-            auto restricted_source = source_.subsource(get_data_offset(), get_data_size());
-            stream = make_uncompressed_source(size, restricted_source).stream();
-        }
+            type{type_},
+            source{source_}
+        {}
 
         const std::string& get_type() const override {
             return type_name(type);
         }
 
         std::istream& get_stream() override {
-            stream->clear();
+            if (!stream) {
+                auto size = get_data_size();
+                auto restricted_source = source.subsource(get_data_offset(), size);
+                stream = make_uncompressed_source(size, std::move(restricted_source)).stream();
+            }
             return *stream;
         }
 
@@ -181,6 +191,7 @@ private:
 
     class delta_object_descriptor : public non_delta_object_descriptor, public pack_delta_descriptor {
         unsigned pack_depth = 0;
+        unsigned extra_header = 0;
         non_delta_object_descriptor& parent;
         git_internal_type external_type;
 
@@ -197,10 +208,13 @@ private:
             return true;
         }
 
+        unsigned get_header_size() const override {
+            return non_delta_object_descriptor::get_header_size() + extra_header;
+        }
+
     public:
-        template <class PACK_SOURCE>
         delta_object_descriptor(
-                const PACK_SOURCE& source,
+                const source_t& source,
                 object_descriptor_base& parent_,
                 const std::string& name,
                 git_internal_type type,
@@ -208,7 +222,8 @@ private:
                 uint64_t size = 0,
                 uint64_t pack_offset = 0,
                 uint64_t pack_size = 0,
-                uint32_t crc = 0
+                uint32_t crc = 0,
+                unsigned extra_header_ = 0
             ) :
             non_delta_object_descriptor{
                 source,
@@ -219,7 +234,9 @@ private:
                 pack_offset,
                 pack_size,
                 crc
-            }, parent { dynamic_cast<non_delta_object_descriptor&>(parent_) }
+            },
+            extra_header{extra_header_},
+            parent { dynamic_cast<non_delta_object_descriptor&>(parent_) }
         {
             std::tie(external_type, pack_depth) = external_type_and_depth();
         }
@@ -251,32 +268,36 @@ private:
 
             if (is_delta(type)) {
                 object_descriptor_base* parent;
+                unsigned extra_header;
                 if (type == DELTA_WITH_OFFSET) {
                     big_unsigned offset;
                     offset.binread(*pack_input);
+                    extra_header = offset.size();
                     parent = &(*this)[item - offset.template convert<size_t>()];
                 } else {
                     std::string parent_name = read_object_name_from(*pack_input);
+                    extra_header = OBJECT_NAME_SIZE/2;
                     parent = &(*this)[parent_name];
                     if (!(parent && *parent)) {
                         throw "broke!";
                     }
                 }
 
-                it = object_cache.emplace(
+                cache_entry_t entry {
                         item.get_name(),
                         std::make_unique<delta_object_descriptor>(
                                 pack_source,
                                 *parent,
                                 item.get_name(),
                                 type,
-                                0,
+                                result.size(),
                                 size,
                                 item.get_pack_offset(),
                                 read_pack_size(item),
-                                item.get_crc()
-                        )
-                ).first;
+                                item.get_crc(),
+                                extra_header
+                        )};
+                it = object_cache.insert(std::move(entry)).first;
             } else {
                 it = object_cache.emplace(
                         item.get_name(),

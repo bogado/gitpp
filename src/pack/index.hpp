@@ -86,6 +86,8 @@ public:
     using ITERABLE::begin;
     using ITERABLE::end;
 
+protected:
+    static const index_type NAME_SIZE = OBJECT_NAME_SIZE;
 private:
     using source_t = SOURCE;
 
@@ -96,7 +98,6 @@ private:
     static const index_type SUMMARY_SIZE = 256 * SUMMARY_ENTRY_SIZE;
 
     static const index_type NAMES_OFFSET = SUMMARY_OFFSET + SUMMARY_SIZE;
-    static const index_type NAME_SIZE = OBJECT_NAME_SIZE;
 
     static const index_type CRC_SIZE = 4;
     static const index_type OFFSET_SIZE = 4;
