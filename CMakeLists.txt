@@ -39,6 +39,7 @@ endif()
 
 add_executable(gitpp_test
     test/test.cpp
+    test/shared_container_test.cpp
     test/big_unsigned_test.cpp
     test/pack_index_test.cpp
     test/pack_loader_test.cpp
