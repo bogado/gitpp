@@ -6,7 +6,7 @@
 #include "util/filesystem.hpp"
 #include "util/git_definitions.hpp"
 #include "streams/iohelper.hpp"
-#include "streams/sources.hpp"
+#include "streams/file_source.hpp"
 
 #include <vector>
 #include <sstream>

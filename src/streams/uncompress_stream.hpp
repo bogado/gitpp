@@ -5,46 +5,48 @@
 
 #include <iostream>
 
-#include <boost/iostreams/restrict.hpp>
 #include <boost/iostreams/filtering_stream.hpp>
 #include <boost/iostreams/filter/zlib.hpp>
+#include <boost/iostreams/restrict.hpp>
 
 namespace git {
 
-template <class DEVICE>
-class uncompressed_source : device_source<DEVICE> {
-    using parent_t = device_source<DEVICE>;
-    uint64_t uncompress_size;
-protected:
-    using parent_t::get_source_device;
+template <typename DEVICE_T>
+class uncompressed_device : public device {
+    DEVICE_T decompressed_source;
 
 public:
-    uncompressed_source(uint64_t size_, parent_t&& raw_source) :
-        device_source<DEVICE>(std::move(raw_source)),
-        uncompress_size(size_)
-    {}
+    using device_type = DEVICE_T;
 
-    uint64_t size() {
-        return uncompress_size;
+    std::unique_ptr<std::streambuf> create_limited_buffer(size_t start, std::optional<size_t> length) override {
+        namespace io = boost::iostreams;
+
+        io::stream_offset sz = -1;
+        if (length) {
+            sz = *length;
+        }
+
+        std::stringstream uncompress_data;
+
+        std::unique_ptr<io::filtering_streambuf<io::input>> out;
+        out->push(io::restrict(io::zlib_decompressor{}, start, sz));
+        out->push(*decompressed_source.create_buffer().release());
+
+        return out;
     }
 
-    auto stream() const {
-        auto result = std::make_unique<boost::iostreams::filtering_istream>();
+    uncompressed_device(device_type raw_source) :
+        decompressed_source{std::move(raw_source)}
+    {}
 
-        boost::iostreams::zlib_decompressor decompress_filter{};
-        result->push(decompress_filter);
-
-        result->push(get_source_device());
-
-        result->set_auto_close(false);
-
-        return result;
+    std::optional<size_t> size() const override {
+        return std::optional<size_t>(); // Unknown size.
     }
 };
 
-template <typename SOURCE>
-auto make_uncompressed_source(uint64_t size, SOURCE&& source) {
-    return uncompressed_source<typename std::remove_reference<SOURCE>::type::device_t>{size, std::move(source)};
+template <typename DEVICE>
+auto make_uncompressed_source(DEVICE source) {
+    return device_source<uncompressed_device<DEVICE>>{source};
 }
 
 }

@@ -1,73 +1,132 @@
 #ifndef SOURCES_HPP_INCLUDED
 #define SOURCES_HPP_INCLUDED
 
-#include <iostream>
+#include "util/shared_container.hpp"
+
+#include <istream>
+#include <streambuf>
 #include <memory>
+#include <optional>
 
 #include "util/filesystem.hpp"
 
-#include <boost/iostreams/device/mapped_file.hpp>
-#include <boost/iostreams/restrict.hpp>
-#include <boost/iostreams/stream.hpp>
-
 namespace git {
 
-template <typename DEVICE>
-class device_source {
-    DEVICE device;
-
+/** A device is a factory for streambufs.
+ *
+ * Each buffer have to hold a shared reference to the device.
+ * As such devices can only be created as shared pointers for this reason
+ * the constructor is protected and a static template make_shared creates
+ * a derived class.
+ */
+class device : public std::enable_shared_from_this<device> {
 public:
-    using device_t = DEVICE;
+    using shared_ptr = std::shared_ptr<device>;
 
-private:
-    using stream_t   = boost::iostreams::stream<device_t>;
-    using restrict_t = boost::iostreams::restriction<device_t>;
+    template <class DERIVED, class... ARG_TYPES>
+    static shared_ptr make_shared(ARG_TYPES&&... args) {
+        static_assert(std::is_base_of<device, DERIVED>::value, "DERIVED must override device");
+        return std::make_shared<DERIVED>(std::forward<ARG_TYPES>(args)...);
+    }
 
-public:
-    using subsource_t = device_source<restrict_t>;
+    virtual ~device() {}
+
+    std::unique_ptr<std::streambuf> create_buffer() {
+        return create_limited_buffer(0, size());
+    }
+
+    std::unique_ptr<std::streambuf> create_sub_buffer(size_t start, size_t length) {
+        return create_limited_buffer(start, length);
+    }
+
+    std::unique_ptr<std::streambuf> create_sub_buffer(size_t start) {
+        auto sz = size();
+        if (sz) {
+            sz.value() -= start;
+        }
+        return create_limited_buffer(start, sz);
+    }
+
+    virtual std::optional<size_t> size() const = 0;
+
+    virtual std::unique_ptr<std::streambuf> create_limited_buffer(size_t start, std::optional<size_t> length) = 0;
 
 protected:
-    device_t& get_source_device() {
-        return device;
+    device() {}
+};
+
+/** A device source is responsible for building streams for devices.
+ *
+ */
+template <typename T,
+         typename = std::enable_if_t<std::is_base_of_v<device, T>>>
+class device_source : public device {
+    std::shared_ptr<T> my_device;
+    size_t start = 0;
+    std::optional<size_t> extent;
+
+    auto subclone(size_t start, std::optional<size_t> size) const {
+        auto result = *this;
+        result.start += start;
+        result.extent = size;
+        return result;
     }
 
-    const device_t& get_source_device() const {
-        return device;
+protected:
+    device::shared_ptr& get_source_device() {
+        return my_device;
     }
+
+    class device_istream : public std::istream {
+        std::unique_ptr<std::streambuf> buffer;
+    public:
+        device_istream(std::unique_ptr<std::streambuf>&& buffer) :
+            std::istream(buffer.get()),
+            buffer(std::move(buffer))
+        {}
+    };
 
 public:
-    template <class... ARGS>
-    device_source(ARGS&&... args) :
-        device(std::forward<ARGS>(args)...)
+    template <typename... ARGS>
+    device_source(ARGS... arg) :
+        my_device(std::make_unique<T>(std::forward<ARGS>(arg)...)),
+        extent(my_device->size())
     {}
 
     std::unique_ptr<std::istream> stream() const {
-        auto result = std::make_unique<stream_t>(device);
-        result->set_auto_close(false);
-        return std::move(result);
+        return std::make_unique<device_istream>(my_device->create_sub_buffer(start));
     }
 
-    auto subsource(uint64_t offset, int64_t size = -1) const {
-        return subsource_t{boost::iostreams::restrict(device, offset, size)};
+    std::unique_ptr<std::istream> substream(size_t offset, size_t size) const {
+        return std::make_unique<device_istream>(my_device->create_sub_buffer(start+offset, size));
     }
 
-    auto substream(uint64_t offset, int64_t size = -1) const {
-        return subsource(offset, size).stream();
+    std::unique_ptr<std::istream> substream(size_t offset) const {
+        return std::make_unique<device_istream>(my_device->create_sub_buffer(start+offset));
     }
-};
 
-// mapped file source
-class file_source : public device_source<boost::iostreams::mapped_file_source> {
-    fs::path file_path;
+    device_source subsource(size_t start, size_t size) const {
+        return subclone(start, size);
+    }
 
-public:
-    file_source(fs::path path) :
-        device_source{path.string()},
-        file_path{path}
-    {}
+    device_source subsource(size_t start) const {
+        if (extent) {
+            return subclone(start, *extent - start);
+        } else {
+            return subclone(start, extent);
+        }
+    }
 
-    uint64_t size() const {
-        return get_source_device().size();
+    std::optional<size_t> size() const override {
+        return extent;
+    }
+
+    std::unique_ptr<std::streambuf> create_limited_buffer(size_t st, std::optional<size_t> length) override {
+        if (!length) {
+            length = extent;
+        }
+
+        return my_device->create_limited_buffer(start+st, length);
     }
 };
 

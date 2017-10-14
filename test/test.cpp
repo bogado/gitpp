@@ -37,12 +37,14 @@ struct Stringizer<char> {
 
 }
 
+void file_source_test();
 void big_unsigned_test();
 void pack_index_test();
 void pack_data_test();
 void shared_container_test();
 
 go_bandit([]{
+    file_source_test();
     shared_container_test();
     big_unsigned_test();
     pack_index_test();

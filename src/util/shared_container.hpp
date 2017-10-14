@@ -21,7 +21,6 @@ struct container_operations {
     using shared_ptr = std::shared_ptr<element_type>;
     using unique_ptr = std::unique_ptr<element_type>;
 
-
     static size_t max_size_of(const CONTAINER& c) {
         return c.max_size();
     }

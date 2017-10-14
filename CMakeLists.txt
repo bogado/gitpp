@@ -43,6 +43,7 @@ add_executable(gitpp_test
     test/big_unsigned_test.cpp
     test/pack_index_test.cpp
     test/pack_loader_test.cpp
+    test/file_source.cpp
     )
 
 add_executable(pack_ls
@@ -51,7 +52,6 @@ add_executable(pack_ls
 
 add_executable(pack_cat_obj
     samples/pack_cat_obj.cpp)
-
 
 include_directories(TARGET gitpp_test)
 include_directories(TARGET gitpp_test SYSTEM vendor/bandit)

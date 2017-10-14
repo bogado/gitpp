@@ -174,8 +174,7 @@ private:
         std::istream& get_stream() override {
             if (!stream) {
                 auto size = get_data_size();
-                auto restricted_source = source.subsource(get_data_offset(), size);
-                stream = make_uncompressed_source(size, std::move(restricted_source)).stream();
+                stream = make_uncompressed_source(source.subsource(get_data_offset(), size)).stream();
             }
             return *stream;
         }
@@ -318,7 +317,7 @@ private:
         return *it->second;
     }
 
-    uint64_t read_pack_size(index_item index) const {
+    size_t read_pack_size(index_item index) const {
         if (!index) {
             return 0;
         }
@@ -328,7 +327,7 @@ private:
             return next_object.get_pack_offset() - index.get_pack_offset();
         }
 
-        return pack_source.size() - index.get_pack_offset() - TAIL_SIZE;
+        return pack_source.size().value() - index.get_pack_offset() - TAIL_SIZE;
     }
 
 public:
