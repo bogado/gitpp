@@ -94,7 +94,13 @@ public:
     {}
 
     std::unique_ptr<std::istream> stream() const {
-        return std::make_unique<device_istream>(my_device->create_sub_buffer(start));
+        std::unique_ptr<std::streambuf> streambuf;
+        if (extent) {
+            streambuf = my_device->create_sub_buffer(start, *extent);
+        } else {
+            streambuf = my_device->create_sub_buffer(start);
+        }
+        return std::make_unique<device_istream>(std::move(streambuf));
     }
 
     std::unique_ptr<std::istream> substream(size_t offset, size_t size) const {

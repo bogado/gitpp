@@ -11,6 +11,7 @@
 
 using namespace git;
 using namespace bandit;
+using namespace snowhouse;
 
 const static std::string SAMPLE_INDEX_FILE(TEST_RESOURCE_PATH "/sample_pack.idx");
 

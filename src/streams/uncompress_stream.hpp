@@ -28,7 +28,7 @@ public:
 
         std::stringstream uncompress_data;
 
-        std::unique_ptr<io::filtering_streambuf<io::input>> out;
+        auto out = std::make_unique<io::filtering_streambuf<io::input>>();
         out->push(io::restrict(io::zlib_decompressor{}, start, sz));
         out->push(*decompressed_source.create_buffer().release());
 

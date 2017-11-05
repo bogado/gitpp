@@ -25,7 +25,7 @@ struct Stringizer<std::string> {
 
 template<>
 struct Stringizer<char> {
-    static std::string ToSting(char v) {
+    static std::string ToString(char v) {
         std::stringstream out;
         if (std::isprint(v)) {
             out << "'" << v <<"' ";

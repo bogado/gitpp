@@ -7,6 +7,7 @@
 
 template <typename COLLECTED, typename CHECK, typename EXPECTED>
 void test_collected(std::string description, COLLECTED& items, const EXPECTED& expected_objects, CHECK check) {
+    using namespace snowhouse;
     auto expected_begin = std::begin(expected_objects);
     auto expected_end   = std::end(expected_objects);
     auto expected = expected_begin;

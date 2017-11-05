@@ -7,6 +7,7 @@
 
 using namespace git;
 using namespace bandit;
+using namespace snowhouse;
 
 const static std::string SAMPLE_TEST_FILE{TEST_RESOURCE_PATH "/test.txt"};
 
@@ -69,8 +70,14 @@ void file_source_test() {
 
         it("file_device_subsource", [&]() {
             auto subsource = fdev.subsource(5,10);
+            AssertThat(*subsource.size(), Equals(10));
+            auto subsource2= subsource.subsource(5);
+            AssertThat(*subsource2.size(), Equals(5));
             auto stream = subsource.stream();
-            std::string a;
+            auto stream2 = subsource2.stream();
+            std::string a,b,c;
+            *stream2 >> b;
+            AssertThat(b, Equals("9abc"));
             *stream >> a;
             AssertThat(a, Equals("5678"));
             *stream >> a;

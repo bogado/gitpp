@@ -5,6 +5,7 @@
 #include <bandit/bandit.h>
 
 using namespace bandit;
+using namespace snowhouse;
 using namespace git;
 
 namespace snowhouse {

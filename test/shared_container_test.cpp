@@ -5,6 +5,7 @@
 #include <bandit/bandit.h>
 
 using namespace bandit;
+using namespace snowhouse;
 using namespace git;
 
 using shared_vector = shared_container<std::vector<int>>;

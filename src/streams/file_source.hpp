@@ -158,15 +158,19 @@ protected:
         if (witch == std::ios_base::out) {
             return 0;
         }
-        return current = off;
+        current = off;
+        return current - start;
     }
 
     pos_type seekoff(off_type off, std::ios_base::seekdir dir, std::ios_base::openmode witch) override {
         if (witch == std::ios_base::out) {
             return 0;
         }
-        return current = (dir == std::ios_base::beg ? start : dir == std::ios_base::end ? finish : current) + off;
+        current = (dir == std::ios_base::beg ? start : dir == std::ios_base::end ? finish : current) + off;
+        return current - start;
     }
+
+
 };
 
 class file_device : public device {
