@@ -120,10 +120,10 @@ class mapped_file_buffer : public std::streambuf {
     using mapper_t = file_mapper<typename traits_type::char_type>;
 
     mapper_t mapped_file;
-    char_type hold = 0;
     size_t start;
     size_t finish;
     size_t current;
+    char_type hold = 0;
 
 public:
     mapped_file_buffer(mapper_t mfile, size_t offset, size_t len) :
@@ -158,7 +158,7 @@ protected:
         if (witch == std::ios_base::out) {
             return 0;
         }
-        current = off;
+        current = static_cast<pos_type>(off);
         return current - start;
     }
 

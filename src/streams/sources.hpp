@@ -65,9 +65,9 @@ class device_source : public device {
     size_t start = 0;
     std::optional<size_t> extent;
 
-    auto subclone(size_t start, std::optional<size_t> size) const {
+    auto subclone(size_t start_, std::optional<size_t> size) const {
         auto result = *this;
-        result.start += start;
+        result.start += start_;
         result.extent = size;
         return result;
     }
@@ -80,9 +80,9 @@ protected:
     class device_istream : public std::istream {
         std::unique_ptr<std::streambuf> buffer;
     public:
-        device_istream(std::unique_ptr<std::streambuf>&& buffer) :
-            std::istream(buffer.get()),
-            buffer(std::move(buffer))
+        device_istream(std::unique_ptr<std::streambuf>&& buf) :
+            std::istream(buf.get()),
+            buffer(std::move(buf))
         {}
     };
 
@@ -111,15 +111,15 @@ public:
         return std::make_unique<device_istream>(my_device->create_sub_buffer(start+offset));
     }
 
-    device_source subsource(size_t start, size_t size) const {
-        return subclone(start, size);
+    device_source subsource(size_t start_, size_t size) const {
+        return subclone(start_, size);
     }
 
-    device_source subsource(size_t start) const {
+    device_source subsource(size_t start_) const {
         if (extent) {
-            return subclone(start, *extent - start);
+            return subclone(start_, *extent - start_);
         } else {
-            return subclone(start, extent);
+            return subclone(start_, extent);
         }
     }
 

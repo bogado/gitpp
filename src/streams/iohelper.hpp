@@ -19,8 +19,8 @@ template <typename UNSIGNED_TYPE, typename SOURCE,
 
 namespace {
 
-inline char hex_digit (unsigned v) {
-    v &= 0x0f;
+inline char hex_digit (unsigned val) {
+    char v = val & 0x0f;
     if (v < 10) {
         return '0' + v;
     } else {
@@ -28,7 +28,7 @@ inline char hex_digit (unsigned v) {
     }
 }
 
-inline uint8_t hex_value(char d) {
+inline auto hex_value(char d) {
     if (d >= 'a' && d <= 'f') { return d - 'a' + 10; }
     if (d >= 'A' && d <= 'F') { return d - 'A' + 10; }
     if (d >= '0' && d <= '9') { return d - '0'; }
